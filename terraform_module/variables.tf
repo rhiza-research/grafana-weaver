@@ -34,9 +34,9 @@ variable "org_id" {
 }
 
 variable "dashboards_base_path" {
-  description = "The base path of the dashboards"
+  description = "The base path of the dashboards to upload to Grafana"
   type = string
-  default = "${path.module}/../../dashboards/build"
+  default = "../dashboards/build"
 }
 
 variable "datasource_config" {

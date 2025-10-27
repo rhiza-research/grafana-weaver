@@ -1,11 +1,5 @@
 terraform {
   required_version = ">= 1.5.7"
-
-  backend "gcs" {
-    bucket = "rhiza-terraform-state"
-    prefix = "sheerwater-config"
-  }
-
   required_providers {
     google = {
       source = "hashicorp/google"

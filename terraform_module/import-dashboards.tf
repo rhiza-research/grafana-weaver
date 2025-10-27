@@ -18,7 +18,7 @@ data "external" "folder_detection" {
 locals {
 
   # Parse folder directories from external data
-  folder_dirs_raw = data.external.folder_detection.result.dirs != "" ? split(",", data.external.folder_detection.result.dirs) : []
+  folder_dirs_raw = var.dashboard_import_enabled && data.external.folder_detection[0].result.dirs != "" ? split(",", data.external.folder_detection[0].result.dirs) : []
   folder_dirs = toset([for dir in local.folder_dirs_raw : dir if dir != ""])
 
   # Parse folder information from directory names
@@ -77,8 +77,7 @@ locals {
 
 # Create folders dynamically based on directory structure
 resource "grafana_folder" "folders" {
-  count = var.dashboard_import_enabled ? 1 : 0
-  for_each = local.folders
+  for_each = var.dashboard_import_enabled ? local.folders : {}
   uid = each.value.uid
   title = each.value.title
   org_id = var.org_id
@@ -86,8 +85,7 @@ resource "grafana_folder" "folders" {
 
 # Create dashboards dynamically, placing them in folders as needed
 resource "grafana_dashboard" "dashboards" {
-  count = var.dashboard_import_enabled ? 1 : 0
-  for_each = local.all_dashboard_files
+  for_each = var.dashboard_import_enabled ? toset(keys(local.all_dashboard_files)) : toset([])
 
   config_json = jsonencode(merge(
     each.value.json
