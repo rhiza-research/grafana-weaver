@@ -14,6 +14,8 @@ data "grafana_dashboard" "export" {
 
   uid = each.key
   org_id = var.org_id
+
+  depends_on = [data.grafana_dashboards.export]
 }
 
 # Helper function to sanitize folder/dashboard names for file paths
@@ -24,7 +26,7 @@ locals {
       # Dashboard titles
       [for d in try(data.grafana_dashboard.export, {}) : jsondecode(d.config_json).title],
       # Folder titles (get from grafana_dashboards data source)
-      [for d in try(data.grafana_dashboards.export[0].dashboards, []) : d.folder_title if d.folder_title != null && d.folder_title != ""]
+      var.dashboard_export_enabled ? [for d in data.grafana_dashboards.export[0].dashboards : d.folder_title if d.folder_title != null && d.folder_title != ""] : []
     )) : name => replace(replace(replace(lower(name), " ", "-"), "/[^a-z0-9-]+/", "-"), "/^-+|-+$/", "")
   }
 
@@ -51,7 +53,7 @@ locals {
 
 # Write dashboard JSON files (with folder structure)
 resource "local_file" "exported_dashboard_json" {
-  for_each = local.exported_dashboards
+  for_each = var.dashboard_export_enabled ? local.exported_dashboards : {}
 
   filename = "${var.dashboard_export_dir}/${each.value.file_path}"
   content = each.value.config_json

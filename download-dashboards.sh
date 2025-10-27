@@ -5,31 +5,46 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TERRAFORM_DIR="$SCRIPT_DIR/../infrastructure/terraform-config"
 
+# note, this makes the script print the content of all dashboards every time it runs because the directory is empty
 DOWNLOADED_DASHBOARDS_DIR=$(mktemp -d)
 
 # TODO: make this dynamic
-WORKSPACE="grafana-pr-87"
+WORKSPACE="grafana-pr-24"
 
 echo "=========================================="
 echo "Downloading Grafana dashboards..."
 echo "=========================================="
 
+cd "$TERRAFORM_DIR"
+terraform workspace select -or-create=true $WORKSPACE
+
+# Get dashboards path from terraform config
+DASHBOARDS_BASE_DIR=$(terraform output -raw dashboards_base_path)
+echo "Using dashboards directory: $DASHBOARDS_BASE_DIR"
+
 # Download dashboards using Terraform
 echo ""
 echo "Step 1: Downloading dashboards from Grafana..."
-cd "$TERRAFORM_DIR"
-terraform workspace select $WORKSPACE
+
+# First refresh state without applying changes
+#echo "Refreshing Terraform state..."
+#terraform apply -refresh-only -var="dashboard_export_enabled=false" -var="dashboard_export_dir=$DOWNLOADED_DASHBOARDS_DIR" -auto-approve
+
+# Then export dashboards (this only creates local files, doesn't touch Grafana)
+echo "Exporting dashboards to local files..."
 terraform apply -var="dashboard_export_enabled=true" -var="dashboard_export_dir=$DOWNLOADED_DASHBOARDS_DIR" -auto-approve
+
 
 # Extract external content from each dashboard
 echo ""
 echo "Step 2: Processing dashboards to extract external content..."
 cd "$SCRIPT_DIR"
-for json_file in $DOWNLOADED_DASHBOARDS_DIR/*.json; do
-    if [ -f "$json_file" ]; then
-        echo "Processing: $(basename "$json_file")"
-        python3 extract_external_content.py "$json_file"
-    fi
+cd "$DOWNLOADED_DASHBOARDS_DIR"
+find . -type f -name "*.json" | while read json_file; do
+    # Remove leading ./ from find output
+    json_file="${json_file#./}"
+    echo "Processing: $json_file"
+    python3 "$SCRIPT_DIR/extract_external_content.py" "$DOWNLOADED_DASHBOARDS_DIR/$json_file" "$(dirname "$json_file")"
 done
 
 rm -rf $DOWNLOADED_DASHBOARDS_DIR
@@ -39,5 +54,5 @@ echo "=========================================="
 echo "Dashboard download complete!"
 echo "=========================================="
 echo "  - Downloaded to: $DOWNLOADED_DASHBOARDS_DIR/"
-echo "  - Jsonnet templates: src/"
-echo "  - Assets: src/assets/"
+echo "  - Jsonnet templates: $DASHBOARDS_BASE_DIR/src/"
+echo "  - Assets: $DASHBOARDS_BASE_DIR/src/assets/"

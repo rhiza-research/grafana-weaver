@@ -702,18 +702,17 @@ def process_json_file(json_file_path, base_dir=None):
         return False
 
     # Set up output directory structure
-    script_dir = Path(__file__).parent
-    src_dir = script_dir / "src"
+    script_dir = Path(__file__).parent.parent
+    src_dir = script_dir / "dashboards" / "src"
     assets_dir = src_dir / "assets"  # All assets go in shared assets/ dir
-    template_dir = src_dir  # Default: templates in src/
+    assets_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use base_dir to create subdirectories if specified
-    if base_dir and base_dir in json_path.parts:
-        base_index = json_path.parts.index(base_dir)
-        if base_index < len(json_path.parts) - 2:
-            # Preserve directory structure after base_dir
-            relative_parts = json_path.parts[base_index + 1:-1]
-            template_dir = src_dir / Path(*relative_parts)
+    # base_dir is the relative subfolder path (e.g., "deprecated" or ".")
+    # If it's ".", put in root of src/, otherwise create subfolder
+    if base_dir and base_dir != ".":
+        template_dir = src_dir / base_dir
+    else:
+        template_dir = src_dir
 
     template_dir.mkdir(parents=True, exist_ok=True)
 

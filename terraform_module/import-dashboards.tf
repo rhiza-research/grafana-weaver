@@ -11,14 +11,15 @@
 
 # Get directories using external data source
 data "external" "folder_detection" {
-  count = var.dashboard_import_enabled ? 1 : 0
-  program = ["sh", "-c", "echo '{\"dirs\":\"'$(find ${var.dashboards_base_path} -maxdepth 1 -mindepth 1 -type d -exec basename {} \\; | tr '\n' ',' | sed 's/,$//')'\"}' "]
+  program = ["sh", "-c", "echo '{\"dirs\":\"'$(find ${var.dashboards_base_path}/build -maxdepth 1 -mindepth 1 -type d -exec basename {} \\; | tr '\n' ',' | sed 's/,$//')'\"}' "]
 }
 
 locals {
 
+  build_dir = "${var.dashboards_base_path}/build"
+
   # Parse folder directories from external data
-  folder_dirs_raw = var.dashboard_import_enabled && data.external.folder_detection[0].result.dirs != "" ? split(",", data.external.folder_detection[0].result.dirs) : []
+  folder_dirs_raw = data.external.folder_detection.result.dirs != "" ? split(",", data.external.folder_detection.result.dirs) : []
   folder_dirs = toset([for dir in local.folder_dirs_raw : dir if dir != ""])
 
   # Parse folder information from directory names
@@ -27,15 +28,15 @@ locals {
       uid = substr(sha256(dir), 0, 14)
       slug = dir
       title = title(dir)
-      path = "${var.dashboards_base_path}/${dir}"
+      path = "${local.build_dir}/${dir}"
     }
   }
 
   # Get all dashboard JSON files from root level
   root_dashboard_files = toset([
-    for file in fileset(var.dashboards_base_path, "*.json") :
+    for file in fileset(local.build_dir, "*.json") :
     file
-  ])
+  ]) 
 
   # Get all dashboard JSON files from folders
   folder_dashboard_files = merge([
@@ -48,19 +49,19 @@ locals {
         full_path = "${folder_info.path}/${file}"
       }
     }
-  ]...)
+  ]...) 
 
   # Parse all dashboards and key by UID
   all_dashboard_files = merge(
     # Root level dashboards
     {
       for file in local.root_dashboard_files :
-      jsondecode(file("${var.dashboards_base_path}/${file}")).uid => {
-        path = "${var.dashboards_base_path}/${file}"
+      jsondecode(file("${local.build_dir}/${file}")).uid => {
+        path = "${local.build_dir}/${file}"
         folder_uid = null
-        json = jsondecode(file("${var.dashboards_base_path}/${file}"))
+        json = jsondecode(file("${local.build_dir}/${file}"))
       }
-      if can(jsondecode(file("${var.dashboards_base_path}/${file}")).uid)
+      if can(jsondecode(file("${local.build_dir}/${file}")).uid)
     },
     # Folder dashboards
     {
@@ -77,7 +78,7 @@ locals {
 
 # Create folders dynamically based on directory structure
 resource "grafana_folder" "folders" {
-  for_each = var.dashboard_import_enabled ? local.folders : {}
+  for_each = local.folders
   uid = each.value.uid
   title = each.value.title
   org_id = var.org_id
@@ -85,7 +86,7 @@ resource "grafana_folder" "folders" {
 
 # Create dashboards dynamically, placing them in folders as needed
 resource "grafana_dashboard" "dashboards" {
-  for_each = var.dashboard_import_enabled ? toset(keys(local.all_dashboard_files)) : toset([])
+  for_each = local.all_dashboard_files
 
   config_json = jsonencode(merge(
     each.value.json

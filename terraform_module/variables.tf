@@ -36,15 +36,13 @@ variable "org_id" {
 variable "dashboards_base_path" {
   description = "The base path of the dashboards to upload to Grafana"
   type = string
-  default = "../dashboards/build"
+  default = "../../dashboards/"
 }
 
 variable "datasource_config" {
   description = "The datasource config"
   type = map(string)
-  default = {
-    "grafana-postgresql-datasource" = "bdz3m3xs99p1cf"
-  }
+  default = {}
 }
 
 # these are only used for the dashboard message, nothing critical.
