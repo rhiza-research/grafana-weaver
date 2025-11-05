@@ -3,8 +3,17 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TERRAFORM_DIR="$SCRIPT_DIR/../infrastructure/terraform-config"
-# TODO: make this dynamic
-WORKSPACE="grafana-pr-24"
+
+# check if WORKSPACE is set, if not ask the user to enter it
+if [ -z "$WORKSPACE" ]; then
+    read -p "Enter the workspace name: " WORKSPACE
+    export WORKSPACE
+    if [ -z "$WORKSPACE" ]; then
+        echo "WORKSPACE is not set, exiting"
+        exit 1
+    fi
+fi
+echo "WORKSPACE is set to $WORKSPACE"
 
 cd $TERRAFORM_DIR
 terraform workspace select -or-create=true $WORKSPACE

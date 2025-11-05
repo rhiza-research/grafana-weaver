@@ -8,8 +8,16 @@ TERRAFORM_DIR="$SCRIPT_DIR/../infrastructure/terraform-config"
 # note, this makes the script print the content of all dashboards every time it runs because the directory is empty
 DOWNLOADED_DASHBOARDS_DIR=$(mktemp -d)
 
-# TODO: make this dynamic
-WORKSPACE="grafana-pr-24"
+# check if WORKSPACE is set, if not ask the user to enter it
+if [ -z "$WORKSPACE" ]; then
+    read -p "Enter the workspace name: " WORKSPACE
+    export WORKSPACE
+    if [ -z "$WORKSPACE" ]; then
+        echo "WORKSPACE is not set, exiting"
+        exit 1
+    fi
+fi
+echo "WORKSPACE is set to $WORKSPACE"
 
 echo "=========================================="
 echo "Downloading Grafana dashboards..."
