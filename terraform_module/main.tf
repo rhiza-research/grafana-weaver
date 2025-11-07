@@ -22,8 +22,3 @@ terraform {
     }
   }
 }
-
-resource "local_file" "datasource_config" {
-  content = jsonencode(var.datasource_config)
-  filename = "${var.dashboards_base_path}/datasource_config.json"
-}
