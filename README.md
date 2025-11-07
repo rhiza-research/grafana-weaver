@@ -1,4 +1,4 @@
-# Dynamic Dashboards
+# Grafana-Weaver
 
 A system for managing Grafana dashboards as code using Jsonnet, with support for extracting large content blocks (SQL queries, JavaScript, etc.) into separate asset files.
 
@@ -98,7 +98,7 @@ SELECT * FROM metrics WHERE date > NOW() - INTERVAL '7 days'
 ## Folder Structure
 
 ```
-dynamic-dash/
+grafana-weaver/
 ├── download-dashboards.sh      # Download from Grafana
 ├── upload-dashboards.sh        # Upload to Grafana
 ├── extract_external_content.py # Python script for extracting EXTERNAL content

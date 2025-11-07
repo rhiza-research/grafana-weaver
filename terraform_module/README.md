@@ -1,6 +1,6 @@
 # Dynamic Grafana Dashboard and Folder Configuration
 
-This terraform module is used to configure the Grafana dashboards and folders for the dynamic-dash project.
+This terraform module is used to configure the Grafana dashboards and folders for the grafana-weaver project.
 
 It is used to upload and download dashboards from Grafana.
 
@@ -49,7 +49,7 @@ resource "grafana_data_source" "postgres" {
   }
 }
 
-module "dynamic-dash" {
+module "grafana-weaver" {
   source = "./terraform_module"
   dashboard_export_enabled = var.dashboard_export_enabled
   dashboard_import_enabled = var.dashboard_import_enabled
