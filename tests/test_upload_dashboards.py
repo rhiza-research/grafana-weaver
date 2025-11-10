@@ -131,10 +131,8 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        # Return JSON format for terraform output
-        import json
-        output_json = json.dumps({"dashboards_base_path": {"value": str(dashboards_dir)}})
-        mock_tf.output.return_value = (0, output_json, "")
+        # python_terraform's output() method returns the extracted value directly
+        mock_tf.output.return_value = (0, str(dashboards_dir), "")
         mock_tf.apply.return_value = (0, "Applied", "")
 
         main()
@@ -224,10 +222,8 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        # Return JSON format for terraform output
-        import json
-        output_json = json.dumps({"dashboards_base_path": {"value": str(dashboards_dir)}})
-        mock_tf.output.return_value = (0, output_json, "")
+        # python_terraform's output() method returns the extracted value directly
+        mock_tf.output.return_value = (0, str(dashboards_dir), "")
         mock_tf.apply.return_value = (1, "", "Apply failed")
 
         with pytest.raises(SystemExit) as exc_info:
