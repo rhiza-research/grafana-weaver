@@ -76,7 +76,7 @@ def main():
 
     # Select or create workspace
     print(f"Selecting workspace: {workspace}")
-    return_code, stdout, stderr = tf.workspace("select", workspace, "-or-create=true")
+    return_code, stdout, stderr = tf.workspace("select", "-or-create=true", workspace)
     if return_code != 0:
         print(f"Error selecting workspace: {stderr}")
         sys.exit(1)

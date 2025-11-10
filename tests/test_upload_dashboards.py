@@ -140,7 +140,7 @@ class TestMain:
         mock_get_workspace.assert_called_once()
         mock_get_terraform_dir.assert_called_once()
         mock_terraform_class.assert_called_once_with(working_dir=str(terraform_dir))
-        mock_tf.workspace.assert_called_once_with("select", "production", "-or-create=true")
+        mock_tf.workspace.assert_called_once_with("select", "-or-create=true", "production")
         mock_tf.output.assert_called_once_with("dashboards_base_path", raw=True)
         mock_build.assert_called_once_with(dashboards_dir)
         mock_tf.apply.assert_called_once()
