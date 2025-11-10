@@ -195,6 +195,33 @@ current-context: myproject-1
 
 The `GRAFANA_CONTEXT` environment variable should match a context name in your config file.
 
+### Terraform Integration
+
+Use the Terraform module at `terraform_module/` to integrate grafana-weaver with Terraform:
+
+```hcl
+module "grafana_weaver" {
+  source = "git::https://github.com/rhiza-research/grafana-weaver.git//terraform_module"
+
+  repo_name            = "myproject"
+  pr_number            = "1"
+  grafana_url          = "https://grafana.example.com"
+  grafana_user = "admin"
+  grafana_password = "password"
+  grafana_org_id = 1
+  dashboards_base_path = "./dashboards"
+  dashboard_download_enabled = true
+  dashboard_upload_enabled = true
+}
+```
+
+The module handles:
+- Writing the grafanactl config file
+- Merging contexts for multiple PRs/repos
+- Running upload operations
+
+See [terraform_module/README.md](terraform_module/README.md) for full documentation.
+
 ## Conflict Detection
 
 When multiple panels reference the same external file with different content:
