@@ -1,8 +1,6 @@
 """Tests for download_dashboards.py module."""
 
-import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -16,302 +14,193 @@ from grafana_weaver.download_dashboards import (
 class TestDownloadDashboardsFromGrafana:
     """Tests for download_dashboards_from_grafana function."""
 
-    def test_successful_download(self, temp_dir):
-        """Successful download should complete without error."""
-        mock_tf = MagicMock()
-        mock_tf.apply.return_value = (0, "Success", "")
+    @patch("grafana_weaver.download_dashboards.requests.get")
+    @patch("grafana_weaver.download_dashboards.get_grafana_config")
+    def test_successful_download(self, mock_get_config, mock_requests_get, tmp_path):
+        """Successful download should download all dashboards."""
+        # Mock config
+        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
 
-        download_dashboards_from_grafana(mock_tf, temp_dir)
+        # Mock search API response
+        search_response = Mock()
+        search_response.status_code = 200
+        search_response.json.return_value = [
+            {"uid": "dash1", "title": "Dashboard 1", "folderTitle": ""},
+            {"uid": "dash2", "title": "Dashboard 2", "folderTitle": "MyFolder"},
+        ]
 
-        # Verify terraform apply was called with correct parameters
-        mock_tf.apply.assert_called_once()
-        call_kwargs = mock_tf.apply.call_args[1]
-        assert call_kwargs['skip_plan'] is True
-        assert call_kwargs['auto_approve'] is True
-        assert call_kwargs['var']['dashboard_export_enabled'] is True
-        assert call_kwargs['var']['dashboard_export_dir'] == str(temp_dir)
+        # Mock dashboard API responses
+        dash1_response = Mock()
+        dash1_response.status_code = 200
+        dash1_response.json.return_value = {
+            "dashboard": {"title": "Dashboard 1", "panels": []},
+            "meta": {"folderTitle": ""},
+        }
 
-    def test_download_error(self, temp_dir):
-        """Download error should exit with error code."""
-        mock_tf = MagicMock()
-        mock_tf.apply.return_value = (1, "", "Terraform error")
+        dash2_response = Mock()
+        dash2_response.status_code = 200
+        dash2_response.json.return_value = {
+            "dashboard": {"title": "Dashboard 2", "panels": []},
+            "meta": {"folderTitle": "MyFolder"},
+        }
+
+        mock_requests_get.side_effect = [search_response, dash1_response, dash2_response]
+
+        download_dashboards_from_grafana(tmp_path, "test-context")
+
+        # Verify dashboards were downloaded
+        assert (tmp_path / "dashboard-1.json").exists()
+        assert (tmp_path / "myfolder" / "dashboard-2.json").exists()
+
+    @patch("grafana_weaver.download_dashboards.requests.get")
+    @patch("grafana_weaver.download_dashboards.get_grafana_config")
+    def test_download_api_error(self, mock_get_config, mock_requests_get, tmp_path):
+        """API error should exit with error code."""
+        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
+
+        # Mock failed API response
+        search_response = Mock()
+        search_response.status_code = 401
+        search_response.text = "Unauthorized"
+        mock_requests_get.return_value = search_response
 
         with pytest.raises(SystemExit) as exc_info:
-            download_dashboards_from_grafana(mock_tf, temp_dir)
+            download_dashboards_from_grafana(tmp_path, "test-context")
         assert exc_info.value.code == 1
+
+    @patch("grafana_weaver.download_dashboards.requests.get")
+    @patch("grafana_weaver.download_dashboards.get_grafana_config")
+    def test_skip_general_folder(self, mock_get_config, mock_requests_get, tmp_path):
+        """Dashboards in General folder should not be in subfolder."""
+        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
+
+        search_response = Mock()
+        search_response.status_code = 200
+        search_response.json.return_value = [
+            {"uid": "dash1", "title": "Dashboard", "folderTitle": "General"},
+        ]
+
+        dash_response = Mock()
+        dash_response.status_code = 200
+        dash_response.json.return_value = {
+            "dashboard": {"title": "Dashboard", "panels": []},
+            "meta": {"folderTitle": "General"},
+        }
+
+        mock_requests_get.side_effect = [search_response, dash_response]
+
+        download_dashboards_from_grafana(tmp_path, "test-context")
+
+        # Dashboard should be in root, not in general/ subfolder
+        assert (tmp_path / "dashboard.json").exists()
+        assert not (tmp_path / "general").exists()
 
 
 class TestProcessDashboards:
     """Tests for process_dashboards function."""
 
-    def test_process_single_dashboard(self, temp_dir, monkeypatch, test_data):
+    @patch("grafana_weaver.download_dashboards.process_json_file")
+    def test_process_single_dashboard(self, mock_process_json, tmp_path):
         """Single dashboard should be processed correctly."""
-        # Copy test data to temp directory
-        test_data_file = test_data("download_dashboards/sample_dashboard.json")
-        dashboard_file = temp_dir / "dashboard.json"
-        with open(test_data_file) as f:
-            dashboard_data = f.read()
-        with open(dashboard_file, 'w') as f:
-            f.write(dashboard_data)
+        downloaded_dir = tmp_path / "downloaded"
+        downloaded_dir.mkdir()
+        output_dir = tmp_path / "output"
 
-        # Create the extract script location
-        script_dir = temp_dir / "grafana_weaver"
-        script_dir.mkdir()
-        extract_script = script_dir / "extract_external_content.py"
-        extract_script.touch()
+        # Create a test dashboard file
+        dashboard_file = downloaded_dir / "test-dashboard.json"
+        dashboard_file.write_text('{"title": "Test Dashboard"}')
 
-        # Mock subprocess.run
-        mock_run = MagicMock()
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "Processing complete"
-        monkeypatch.setattr(subprocess, 'run', mock_run)
+        # Mock successful processing
+        mock_process_json.return_value = True
 
-        process_dashboards(temp_dir)
+        process_dashboards(downloaded_dir, output_dir)
 
-        # Verify extract script was called
-        assert mock_run.called
+        # Verify process_json_file was called with correct arguments
+        assert mock_process_json.called
+        call_args = mock_process_json.call_args
+        assert call_args[1]["base_dir"] == str(downloaded_dir)
+        assert call_args[1]["output_dir"] == str(output_dir)
 
-    def test_process_nested_dashboards(self, temp_dir, monkeypatch, test_data):
-        """Nested dashboards should preserve folder structure."""
-        # Create nested folder structure
-        nested_dir = temp_dir / "folder1" / "folder2"
-        nested_dir.mkdir(parents=True)
+    @patch("grafana_weaver.download_dashboards.process_json_file")
+    def test_process_nested_dashboards(self, mock_process_json, tmp_path):
+        """Nested dashboards should be processed with correct base-dir."""
+        downloaded_dir = tmp_path / "downloaded"
+        downloaded_dir.mkdir()
+        nested_dir = downloaded_dir / "subfolder"
+        nested_dir.mkdir()
+        output_dir = tmp_path / "output"
 
-        # Copy test data to nested directory
-        test_data_file = test_data("download_dashboards/sample_dashboard.json")
-        dashboard_file = nested_dir / "nested.json"
-        with open(test_data_file) as f:
-            dashboard_data = f.read()
-        with open(dashboard_file, 'w') as f:
-            f.write(dashboard_data)
+        # Create nested dashboard
+        dashboard_file = nested_dir / "nested-dashboard.json"
+        dashboard_file.write_text('{"title": "Nested Dashboard"}')
 
-        # Create the extract script
-        script_dir = temp_dir / "grafana_weaver"
-        script_dir.mkdir()
-        extract_script = script_dir / "extract_external_content.py"
-        extract_script.touch()
+        # Mock successful processing
+        mock_process_json.return_value = True
 
-        # Mock subprocess.run
-        mock_run = MagicMock()
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = ""
-        monkeypatch.setattr(subprocess, 'run', mock_run)
+        process_dashboards(downloaded_dir, output_dir)
 
-        process_dashboards(temp_dir)
+        # Verify base-dir points to downloaded_dir (not nested folder)
+        assert mock_process_json.called
+        call_args = mock_process_json.call_args
+        assert call_args[1]["base_dir"] == str(downloaded_dir)
 
-        # Verify the script was called with base_dir parameter
-        assert mock_run.called
-        call_args = mock_run.call_args[0][0]
-        assert str(nested_dir / "nested.json") in " ".join(call_args)
+    @patch("grafana_weaver.download_dashboards.process_json_file")
+    def test_process_extraction_error(self, mock_process_json, tmp_path):
+        """Extraction error should exit with error code."""
+        downloaded_dir = tmp_path / "downloaded"
+        downloaded_dir.mkdir()
+        output_dir = tmp_path / "output"
 
-    def test_no_dashboards(self, temp_dir, capsys):
-        """No dashboards should print message."""
-        script_dir = temp_dir / "grafana_weaver"
-        script_dir.mkdir()
+        dashboard_file = downloaded_dir / "test.json"
+        dashboard_file.write_text("{}")
 
-        process_dashboards(temp_dir)
+        # Mock failed extraction
+        mock_process_json.return_value = False
+
+        with pytest.raises(SystemExit) as exc_info:
+            process_dashboards(downloaded_dir, output_dir)
+        assert exc_info.value.code == 1
+
+    def test_no_dashboards_found(self, tmp_path, capsys):
+        """Empty directory should complete without error."""
+        downloaded_dir = tmp_path / "downloaded"
+        downloaded_dir.mkdir()
+        output_dir = tmp_path / "output"
+
+        process_dashboards(downloaded_dir, output_dir)
 
         captured = capsys.readouterr()
         assert "No JSON files found" in captured.out
 
-    def test_extract_script_missing(self, temp_dir, test_data):
-        """Missing extract script should exit with error."""
-        # Copy test data to temp directory
-        test_data_file = test_data("download_dashboards/sample_dashboard.json")
-        dashboard_file = temp_dir / "dashboard.json"
-        with open(test_data_file) as f:
-            dashboard_data = f.read()
-        with open(dashboard_file, 'w') as f:
-            f.write(dashboard_data)
-
-        # Mock the __file__ path to point to a location without the script
-        fake_module_path = temp_dir / "fake_module" / "download_dashboards.py"
-        fake_module_path.parent.mkdir(parents=True, exist_ok=True)
-        fake_module_path.touch()
-
-        with patch('grafana_weaver.download_dashboards.__file__', str(fake_module_path)):
-            with pytest.raises(SystemExit) as exc_info:
-                process_dashboards(temp_dir)
-            assert exc_info.value.code == 1
-
-    def test_extraction_error(self, temp_dir, monkeypatch, test_data):
-        """Extraction error should exit with error code."""
-        # Copy test data to temp directory
-        test_data_file = test_data("download_dashboards/sample_dashboard.json")
-        dashboard_file = temp_dir / "dashboard.json"
-        with open(test_data_file) as f:
-            dashboard_data = f.read()
-        with open(dashboard_file, 'w') as f:
-            f.write(dashboard_data)
-
-        script_dir = temp_dir / "grafana_weaver"
-        script_dir.mkdir()
-        extract_script = script_dir / "extract_external_content.py"
-        extract_script.touch()
-
-        # Mock subprocess.run to return error
-        mock_run = MagicMock()
-        mock_run.return_value.returncode = 1
-        mock_run.return_value.stderr = "Extraction failed"
-        monkeypatch.setattr(subprocess, 'run', mock_run)
-
-        with pytest.raises(SystemExit) as exc_info:
-            process_dashboards(temp_dir)
-        assert exc_info.value.code == 1
-
 
 class TestMain:
-    """Integration tests for main function."""
+    """Tests for main function."""
 
-    @patch('grafana_weaver.download_dashboards.tempfile.mkdtemp')
-    @patch('grafana_weaver.download_dashboards.Terraform')
-    @patch('grafana_weaver.download_dashboards.get_workspace')
-    @patch('grafana_weaver.download_dashboards.get_terraform_dir')
-    @patch('grafana_weaver.download_dashboards.process_dashboards')
-    def test_main_success(
-        self,
-        mock_process,
-        mock_get_terraform_dir,
-        mock_get_workspace,
-        mock_terraform_class,
-        mock_mkdtemp,
-        temp_dir
-    ):
-        """Main should orchestrate the download process."""
-        # Setup workspace
-        mock_get_workspace.return_value = "production"
-
-        # Setup terraform directory
-        terraform_dir = temp_dir / "terraform"
-        terraform_dir.mkdir()
-        mock_get_terraform_dir.return_value = terraform_dir
-
-        # Setup downloads directory
-        downloads_dir = temp_dir / "downloads"
-        downloads_dir.mkdir()
-        mock_mkdtemp.return_value = str(downloads_dir)
-
-        # Setup dashboards directory
-        dashboards_dir = temp_dir / "dashboards"
-        dashboards_dir.mkdir()
-
-        # Mock Terraform
-        mock_tf = MagicMock()
-        mock_terraform_class.return_value = mock_tf
-        mock_tf.workspace.return_value = (0, "Success", "")
-        # output_cmd returns (ret_code, output, stderr) with JSON
-        import json
-        output_json = json.dumps({"value": str(dashboards_dir)})
-        mock_tf.output_cmd.return_value = (0, output_json, "")
-        mock_tf.apply.return_value = (0, "Success", "")
+    @patch("grafana_weaver.download_dashboards.process_dashboards")
+    @patch("grafana_weaver.download_dashboards.download_dashboards_from_grafana")
+    @patch("grafana_weaver.download_dashboards.get_grafana_context")
+    def test_main_success(self, mock_get_grafana_context, mock_download, mock_process, tmp_path, monkeypatch):
+        """Main should orchestrate download and processing."""
+        mock_get_grafana_context.return_value = "test-context"
+        monkeypatch.chdir(tmp_path)
 
         main()
 
-        # Verify the workflow
-        mock_get_workspace.assert_called_once()
-        mock_get_terraform_dir.assert_called_once()
-        mock_terraform_class.assert_called_once_with(working_dir=str(terraform_dir))
-        mock_tf.workspace.assert_called_once_with("select", "-or-create=true", "production")
-        mock_tf.output_cmd.assert_called_once()
-        mock_tf.apply.assert_called_once()
-        mock_process.assert_called_once_with(downloads_dir)
+        # Verify workflow was called
+        mock_get_grafana_context.assert_called_once()
+        mock_download.assert_called_once()
+        mock_process.assert_called_once()
 
-    @patch('grafana_weaver.download_dashboards.tempfile.mkdtemp')
-    @patch('grafana_weaver.download_dashboards.Terraform')
-    @patch('grafana_weaver.download_dashboards.get_workspace')
-    @patch('grafana_weaver.download_dashboards.get_terraform_dir')
-    def test_main_workspace_error(
-        self,
-        mock_get_terraform_dir,
-        mock_get_workspace,
-        mock_terraform_class,
-        mock_mkdtemp,
-        temp_dir
-    ):
-        """Workspace selection error should exit with error code."""
-        mock_get_workspace.return_value = "production"
+    @patch("grafana_weaver.download_dashboards.download_dashboards_from_grafana")
+    @patch("grafana_weaver.download_dashboards.get_grafana_context")
+    def test_main_uses_dashboard_dir_env(self, mock_get_grafana_context, mock_download, tmp_path, monkeypatch):
+        """Main should use DASHBOARD_DIR environment variable."""
+        mock_get_grafana_context.return_value = "test-context"
+        dashboard_dir = tmp_path / "custom-dashboards"
+        monkeypatch.setenv("DASHBOARD_DIR", str(dashboard_dir))
 
-        terraform_dir = temp_dir / "terraform"
-        terraform_dir.mkdir()
-        mock_get_terraform_dir.return_value = terraform_dir
-
-        downloads_dir = temp_dir / "downloads"
-        downloads_dir.mkdir()
-        mock_mkdtemp.return_value = str(downloads_dir)
-
-        mock_tf = MagicMock()
-        mock_terraform_class.return_value = mock_tf
-        mock_tf.workspace.return_value = (1, "", "Workspace not found")
-
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        assert exc_info.value.code == 1
-
-    @patch('grafana_weaver.download_dashboards.tempfile.mkdtemp')
-    @patch('grafana_weaver.download_dashboards.Terraform')
-    @patch('grafana_weaver.download_dashboards.get_workspace')
-    @patch('grafana_weaver.download_dashboards.get_terraform_dir')
-    def test_main_output_error(
-        self,
-        mock_get_terraform_dir,
-        mock_get_workspace,
-        mock_terraform_class,
-        mock_mkdtemp,
-        temp_dir
-    ):
-        """Terraform output error should exit with error code."""
-        mock_get_workspace.return_value = "production"
-
-        terraform_dir = temp_dir / "terraform"
-        terraform_dir.mkdir()
-        mock_get_terraform_dir.return_value = terraform_dir
-
-        downloads_dir = temp_dir / "downloads"
-        downloads_dir.mkdir()
-        mock_mkdtemp.return_value = str(downloads_dir)
-
-        mock_tf = MagicMock()
-        mock_terraform_class.return_value = mock_tf
-        mock_tf.workspace.return_value = (0, "Success", "")
-        # output_cmd returns error code
-        mock_tf.output_cmd.return_value = (1, "", "Output not found")
-
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        assert exc_info.value.code == 1
-
-    @patch('grafana_weaver.download_dashboards.tempfile.mkdtemp')
-    @patch('grafana_weaver.download_dashboards.Terraform')
-    @patch('grafana_weaver.download_dashboards.get_workspace')
-    @patch('grafana_weaver.download_dashboards.get_terraform_dir')
-    def test_main_cleanup_temp_dir(
-        self,
-        mock_get_terraform_dir,
-        mock_get_workspace,
-        mock_terraform_class,
-        mock_mkdtemp,
-        temp_dir
-    ):
-        """Temporary directory should be cleaned up even on error."""
-        # Setup workspace and terraform
-        mock_get_workspace.return_value = "production"
-
-        terraform_dir = temp_dir / "terraform"
-        terraform_dir.mkdir()
-        mock_get_terraform_dir.return_value = terraform_dir
-
-        # Setup a temp directory that we can verify gets cleaned up
-        downloads_dir = temp_dir / "downloads"
-        downloads_dir.mkdir()
-        mock_mkdtemp.return_value = str(downloads_dir)
-
-        # Make terraform workspace fail to trigger cleanup in finally block
-        mock_tf = MagicMock()
-        mock_terraform_class.return_value = mock_tf
-        mock_tf.workspace.return_value = (1, "", "Workspace error")
-
-        with pytest.raises(SystemExit):
+        with patch("grafana_weaver.download_dashboards.process_dashboards"):
             main()
 
-        # Verify cleanup happened
-        assert not downloads_dir.exists()
+        # The processing should be called (which means it got past directory setup)
+        assert mock_download.called

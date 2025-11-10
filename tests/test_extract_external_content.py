@@ -53,19 +53,19 @@ class TestParseExternalParams:
         """Single parameter should be parsed correctly."""
         line = "// EXTERNAL({key: 'value'})"
         result = parse_external_params(line)
-        assert result == {'key': 'value'}
+        assert result == {"key": "value"}
 
     def test_multiple_params(self):
         """Multiple parameters should be parsed correctly."""
         line = "// EXTERNAL({panel_id: 'test', key: 'script', ext: 'js'})"
         result = parse_external_params(line)
-        assert result == {'panel_id': 'test', 'key': 'script', 'ext': 'js'}
+        assert result == {"panel_id": "test", "key": "script", "ext": "js"}
 
     def test_params_with_quotes(self):
         """Parameters with various quote styles should be parsed."""
-        line = '// EXTERNAL({key: "value", key2: \'value2\'})'
+        line = "// EXTERNAL({key: \"value\", key2: 'value2'})"
         result = parse_external_params(line)
-        assert result == {'key': 'value', 'key2': 'value2'}
+        assert result == {"key": "value", "key2": "value2"}
 
 
 class TestDetermineFileExtension:
@@ -74,32 +74,32 @@ class TestDetermineFileExtension:
     def test_javascript_detection(self):
         """JavaScript content should be detected."""
         content = "function foo() { return 'bar'; }"
-        assert determine_file_extension(content) == '.js'
+        assert determine_file_extension(content) == ".js"
 
     def test_javascript_arrow_function(self):
         """Arrow function syntax should be detected as JavaScript."""
         content = "const foo = () => 'bar';"
-        assert determine_file_extension(content) == '.js'
+        assert determine_file_extension(content) == ".js"
 
     def test_sql_detection(self):
         """SQL content should be detected."""
         content = "SELECT * FROM table WHERE id = 1"
-        assert determine_file_extension(content) == '.sql'
+        assert determine_file_extension(content) == ".sql"
 
     def test_html_detection(self):
         """HTML content should be detected."""
         content = "<div>Hello World</div>"
-        assert determine_file_extension(content) == '.html'
+        assert determine_file_extension(content) == ".html"
 
     def test_markdown_detection(self):
         """Markdown content should be detected."""
         content = "# Header\n## Subheader"
-        assert determine_file_extension(content) == '.md'
+        assert determine_file_extension(content) == ".md"
 
     def test_default_fallback(self):
         """Unknown content should default to .txt."""
         content = "Some random text"
-        assert determine_file_extension(content) == '.txt'
+        assert determine_file_extension(content) == ".txt"
 
 
 class TestExtractFilenameFromExternalLine:
@@ -133,7 +133,7 @@ class TestGenerateFilename:
         """Panel script should generate filename with panel ID."""
         content = "function foo() {}"
         key = "script"
-        root_data = {'uid': 'test-dash', 'panels': [{'id': 5}]}
+        root_data = {"uid": "test-dash", "panels": [{"id": 5}]}
         path = "panels[0].options.script"
 
         filename = generate_filename(content, key, root_data, path)
@@ -143,7 +143,7 @@ class TestGenerateFilename:
         """Dashboard-level query should not include panel ID."""
         content = "SELECT * FROM foo"
         key = "query"
-        root_data = {'uid': 'test-dash'}
+        root_data = {"uid": "test-dash"}
         path = "templating.query"
 
         filename = generate_filename(content, key, root_data, path)
@@ -153,9 +153,9 @@ class TestGenerateFilename:
         """Parameters should override default values."""
         content = "test"
         key = "script"
-        root_data = {'uid': 'test-dash', 'panels': [{'id': 1}]}
+        root_data = {"uid": "test-dash", "panels": [{"id": 1}]}
         path = "panels[0].options.script"
-        params = {'panel_id': 'custom', 'key': 'params', 'ext': 'txt'}
+        params = {"panel_id": "custom", "key": "params", "ext": "txt"}
 
         filename = generate_filename(content, key, root_data, path, params)
         assert filename == "test-dash-custom-params.txt"
@@ -250,14 +250,12 @@ class TestCreateJsonnet:
         modifications = []
         result = create_jsonnet(data, modifications)
         assert '"uid": "test"' in result
-        assert 'importstr' not in result
+        assert "importstr" not in result
 
     def test_single_import(self):
         """Single EXTERNAL should create importstr."""
         data = {"script": "__colors_js__"}
-        modifications = [
-            {'filename': 'colors.js', 'var_name': 'colors_js'}
-        ]
+        modifications = [{"filename": "colors.js", "var_name": "colors_js"}]
         result = create_jsonnet(data, modifications)
         assert "local colors_js = importstr './assets/colors.js';" in result
         assert '"script": colors_js' in result
@@ -266,8 +264,8 @@ class TestCreateJsonnet:
         """Multiple EXTERNALs should create multiple importstr."""
         data = {"script": "__CONCAT__colors_js + utils_js__"}
         modifications = [
-            {'filename': 'colors.js', 'var_name': 'colors_js'},
-            {'filename': 'utils.js', 'var_name': 'utils_js'}
+            {"filename": "colors.js", "var_name": "colors_js"},
+            {"filename": "utils.js", "var_name": "utils_js"},
         ]
         result = create_jsonnet(data, modifications)
         assert "local colors_js = importstr './assets/colors.js';" in result
@@ -278,14 +276,17 @@ class TestCreateJsonnet:
 class TestExtractExternalIntegration:
     """Integration tests using test_data fixtures."""
 
-    @pytest.mark.parametrize("test_name", [
-        "basic_extraction",
-        "custom_filename",
-        "parameterized_filename",
-        "concatenated_external",
-        "comment_preservation",
-        "filename_starts_with_digit",
-    ])
+    @pytest.mark.parametrize(
+        "test_name",
+        [
+            "basic_extraction",
+            "custom_filename",
+            "parameterized_filename",
+            "concatenated_external",
+            "comment_preservation",
+            "filename_starts_with_digit",
+        ],
+    )
     def test_json_to_jsonnet(self, test_name, temp_dir, test_data):
         """Test JSON to Jsonnet+assets extraction with real test data."""
         input_file = test_data.input_json(test_name)
@@ -293,7 +294,7 @@ class TestExtractExternalIntegration:
         expected_assets_dir = test_data.assets(test_name)
 
         # Load input JSON
-        with open(input_file, 'r') as f:
+        with open(input_file) as f:
             data = json.load(f)
 
         # Create output directory in temp
@@ -304,47 +305,53 @@ class TestExtractExternalIntegration:
         # Extract EXTERNAL content
         modifications = []
         asset_hashes = load_existing_asset_hashes(assets_dir)
-        extract_external_content(data, assets_dir=assets_dir, root_data=data,
-                                modifications=modifications, asset_hashes=asset_hashes)
+        extract_external_content(
+            data,
+            assets_dir=assets_dir,
+            root_data=data,
+            modifications=modifications,
+            asset_hashes=asset_hashes,
+        )
 
         # Remove 'id' field
-        if 'id' in data:
-            del data['id']
+        if "id" in data:
+            del data["id"]
 
         # Generate jsonnet
         actual_jsonnet = create_jsonnet(data, modifications)
 
         # Load expected jsonnet
-        with open(expected_jsonnet_file, 'r') as f:
+        with open(expected_jsonnet_file) as f:
             expected_jsonnet = f.read()
 
         # Compare jsonnet output
-        assert actual_jsonnet.strip() == expected_jsonnet.strip(), \
-            f"Jsonnet output doesn't match for {test_name}"
+        assert actual_jsonnet.strip() == expected_jsonnet.strip(), f"Jsonnet output doesn't match for {test_name}"
 
         # Compare asset files
         if expected_assets_dir.exists():
             for expected_asset in expected_assets_dir.iterdir():
                 if expected_asset.is_file():
                     actual_asset = assets_dir / expected_asset.name
-                    assert actual_asset.exists(), \
-                        f"Expected asset {expected_asset.name} not created for {test_name}"
+                    assert actual_asset.exists(), f"Expected asset {expected_asset.name} not created for {test_name}"
 
-                    assert actual_asset.read_text() == expected_asset.read_text(), \
+                    assert actual_asset.read_text() == expected_asset.read_text(), (
                         f"Asset {expected_asset.name} content doesn't match for {test_name}"
+                    )
 
-    @pytest.mark.parametrize("test_name", [
-        "basic_extraction",
-        "custom_filename",
-        "parameterized_filename",
-        "concatenated_external",
-        "comment_preservation",
-        "filename_starts_with_digit",
-    ])
+    @pytest.mark.parametrize(
+        "test_name",
+        [
+            "basic_extraction",
+            "custom_filename",
+            "parameterized_filename",
+            "concatenated_external",
+            "comment_preservation",
+            "filename_starts_with_digit",
+        ],
+    )
     def test_jsonnet_to_json_roundtrip(self, test_name, test_data):
         """Test building Jsonnet+assets back to JSON (round-trip test)."""
         import subprocess
-        import re
 
         test_data_dir = test_data.dir(test_name)
         input_jsonnet = test_data.expected_jsonnet(test_name)
@@ -357,7 +364,7 @@ class TestExtractExternalIntegration:
             capture_output=True,
             text=True,
             check=True,
-            cwd=str(test_data_dir)  # Run from test_data dir so relative paths work
+            cwd=str(test_data_dir),  # Run from test_data dir so relative paths work
         )
 
         actual_json = json.loads(result.stdout)
@@ -367,12 +374,12 @@ class TestExtractExternalIntegration:
         # to match this by reading what's actually in the asset files.
 
         # Load expected JSON structure from input.json
-        with open(input_json_file, 'r') as f:
+        with open(input_json_file) as f:
             expected_json = json.load(f)
 
         # Remove 'id' field from expected if present (it gets stripped during extraction)
-        if 'id' in expected_json:
-            del expected_json['id']
+        if "id" in expected_json:
+            del expected_json["id"]
 
         # Update expected JSON to have the content from asset files (with EXTERNAL headers)
         # Read all asset files and map them to their content
@@ -387,15 +394,15 @@ class TestExtractExternalIntegration:
             """Recursively find EXTERNAL markers and replace with asset content."""
             if isinstance(obj, dict):
                 for key, value in obj.items():
-                    if isinstance(value, str) and 'EXTERNAL' in value:
+                    if isinstance(value, str) and "EXTERNAL" in value:
                         # Check if this field contains one or more EXTERNAL markers
                         # We need to handle both:
                         # 1. Single EXTERNAL (with or without filename) - match to single asset
                         # 2. Multiple EXTERNAL (concatenated) - match to multiple assets
 
                         # Split by lines and find all EXTERNAL markers
-                        lines = value.split('\n')
-                        external_lines = [line for line in lines if 'EXTERNAL' in line]
+                        lines = value.split("\n")
+                        external_lines = [line for line in lines if "EXTERNAL" in line]
 
                         if len(external_lines) == 1:
                             # Single EXTERNAL - find the matching asset
@@ -405,15 +412,15 @@ class TestExtractExternalIntegration:
                             # Check if there's an explicit filename after the params
                             # Format: EXTERNAL({params}):filename or EXTERNAL:filename
                             has_explicit_filename = False
-                            if ':' in external_line:
+                            if ":" in external_line:
                                 # Check if the colon comes after params (if params exist)
-                                if '}):' in external_line:
+                                if "}):" in external_line:
                                     # Has params AND explicit filename
-                                    filename = external_line.split('}):')[1].strip()
+                                    filename = external_line.split("}):")[1].strip()
                                     has_explicit_filename = True
-                                elif '})' not in external_line:
+                                elif "})" not in external_line:
                                     # No params, just filename
-                                    filename = external_line.split(':', 1)[1].strip()
+                                    filename = external_line.split(":", 1)[1].strip()
                                     has_explicit_filename = True
 
                             if has_explicit_filename and filename in asset_contents:
@@ -421,9 +428,10 @@ class TestExtractExternalIntegration:
                             else:
                                 # No explicit filename - match by content
                                 # The content after the EXTERNAL line should match
-                                content_after = value.split('\n', 1)[1] if '\n' in value else ''
+                                content_after = value.split("\n", 1)[1] if "\n" in value else ""
                                 for filename, asset_content in asset_contents.items():
-                                    asset_content_after = asset_content.split('\n', 1)[1] if '\n' in asset_content else ''
+                                    asset_parts = asset_content.split("\n", 1)
+                                    asset_content_after = asset_parts[1] if len(asset_parts) > 1 else ""
                                     if asset_content_after.strip() == content_after.strip():
                                         obj[key] = asset_content
                                         break
@@ -431,13 +439,13 @@ class TestExtractExternalIntegration:
                             # Multiple EXTERNAL markers - concatenate all matching assets
                             result_parts = []
                             for line in lines:
-                                if 'EXTERNAL' in line and ':' in line:
-                                    filename = line.split(':', 1)[1].strip()
+                                if "EXTERNAL" in line and ":" in line:
+                                    filename = line.split(":", 1)[1].strip()
                                     if filename in asset_contents:
                                         result_parts.append(asset_contents[filename])
 
                             if result_parts:
-                                obj[key] = ''.join(result_parts)
+                                obj[key] = "".join(result_parts)
                     else:
                         replace_external_with_asset_content(value)
             elif isinstance(obj, list):
@@ -447,8 +455,7 @@ class TestExtractExternalIntegration:
         replace_external_with_asset_content(expected_json)
 
         # Compare
-        assert actual_json == expected_json, \
-            f"Built JSON doesn't match expected output for {test_name}"
+        assert actual_json == expected_json, f"Built JSON doesn't match expected output for {test_name}"
 
 
 class TestHashCheckingAndConflicts:
@@ -468,8 +475,13 @@ class TestHashCheckingAndConflicts:
         # Process same content again
         data = {"script": "// EXTERNAL:test.js\nconst x = 1;"}
         modifications = []
-        extract_external_content(data, assets_dir=assets_dir, root_data={"uid": "test"},
-                                modifications=modifications, asset_hashes=asset_hashes)
+        extract_external_content(
+            data,
+            assets_dir=assets_dir,
+            root_data={"uid": "test"},
+            modifications=modifications,
+            asset_hashes=asset_hashes,
+        )
 
         # File should not have been modified (mtime should be same)
         assert asset_file.read_text() == "// EXTERNAL:test.js\nconst x = 1;\n"
@@ -488,8 +500,13 @@ class TestHashCheckingAndConflicts:
         # Process different content with same filename
         data = {"script": "// EXTERNAL:test.js\nconst x = 2;"}
         modifications = []
-        extract_external_content(data, assets_dir=assets_dir, root_data={"uid": "test"},
-                                modifications=modifications, asset_hashes=asset_hashes)
+        extract_external_content(
+            data,
+            assets_dir=assets_dir,
+            root_data={"uid": "test"},
+            modifications=modifications,
+            asset_hashes=asset_hashes,
+        )
 
         # File should be updated
         assert asset_file.read_text() == "// EXTERNAL:test.js\nconst x = 2;\n"
@@ -499,7 +516,7 @@ class TestHashCheckingAndConflicts:
         input_file = test_data.input_json("conflict_detection")
 
         # Load input data
-        with open(input_file, 'r') as f:
+        with open(input_file) as f:
             data = json.load(f)
 
         assets_dir = temp_dir / "assets"
@@ -507,8 +524,13 @@ class TestHashCheckingAndConflicts:
 
         modifications = []
         asset_hashes = load_existing_asset_hashes(assets_dir)
-        extract_external_content(data, assets_dir=assets_dir, root_data=data,
-                                modifications=modifications, asset_hashes=asset_hashes)
+        extract_external_content(
+            data,
+            assets_dir=assets_dir,
+            root_data=data,
+            modifications=modifications,
+            asset_hashes=asset_hashes,
+        )
 
         # Main file should have first panel's content
         main_file = assets_dir / "shared.js"
@@ -529,7 +551,7 @@ class TestHashCheckingAndConflicts:
         input_file = test_data.input_json("same_content_multiple_panels")
 
         # Load input data
-        with open(input_file, 'r') as f:
+        with open(input_file) as f:
             data = json.load(f)
 
         assets_dir = temp_dir / "assets"
@@ -537,8 +559,13 @@ class TestHashCheckingAndConflicts:
 
         modifications = []
         asset_hashes = load_existing_asset_hashes(assets_dir)
-        extract_external_content(data, assets_dir=assets_dir, root_data=data,
-                                modifications=modifications, asset_hashes=asset_hashes)
+        extract_external_content(
+            data,
+            assets_dir=assets_dir,
+            root_data=data,
+            modifications=modifications,
+            asset_hashes=asset_hashes,
+        )
 
         # Main file should exist
         main_file = assets_dir / "shared.js"
@@ -602,6 +629,7 @@ class TestProcessJsonFile:
 
         # Copy test data into the subdirectory
         import shutil
+
         input_file = input_subdir / "input.json"
         shutil.copy(test_data.input_json("cli_with_subdir"), input_file)
 

@@ -7,7 +7,7 @@ A system for managing Grafana dashboards as code using Jsonnet, with support for
 This system allows you to:
 1. **Download** dashboards from Grafana and convert them to Jsonnet templates with external assets
 2. **Edit** dashboard configuration and assets as code
-3. **Upload** changes back to Grafana via Terraform
+3. **Upload** changes back to Grafana via the Grafana API
 
 ## Installation
 
@@ -43,34 +43,36 @@ uv pip install .
 
 Using uvx (no installation required):
 ```bash
-WORKSPACE=production uvx --from . download-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . download-dashboards
 ```
 
 Or if installed:
 ```bash
-WORKSPACE=production download-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards download-dashboards
 ```
 
 This script:
-1. Exports all dashboards from Grafana (including folder structure)
-2. Extracts external content (marked with `EXTERNAL`) into `../dashboards/src/assets/`
-3. Generates Jsonnet templates in `../dashboards/src/`
+1. Reads credentials from your grafanactl config file
+2. Downloads all dashboards from Grafana via the Grafana API (including folder structure)
+3. Extracts external content (marked with `EXTERNAL`) into `./dashboards/src/assets/`
+4. Generates Jsonnet templates in `./dashboards/src/`
 
 ### Upload Dashboards to Grafana
 
 Using uvx (no installation required):
 ```bash
-WORKSPACE=production uvx --from . upload-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . upload-dashboards
 ```
 
 Or if installed:
 ```bash
-WORKSPACE=production upload-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards upload-dashboards
 ```
 
 This script:
-1. Builds all `.jsonnet` files from `../dashboards/src/` into JSON
-2. Applies them to Grafana via Terraform
+1. Reads credentials from your grafanactl config file
+2. Builds all `.jsonnet` files from `./dashboards/src/` into JSON
+3. Uploads them to Grafana via the Grafana API
 
 ## External Content
 
@@ -165,13 +167,33 @@ grafana-weaver/
 
 ## Configuration
 
-In your terraform configuration that uses this module, define the dashboard location in your `terraform.tfvars`:
+Grafana-Weaver uses a config file in the [grafanactl](https://github.com/grafana/grafana-cli) format for Grafana credentials. You don't need to have grafanactl installed - just create the config file with your Grafana server details.
 
-```hcl
-dashboards_base_path = "../../dashboards"  # Path relative to your terraform config
+### Environment Variables
+
+- `GRAFANA_CONTEXT` - The grafanactl context name (e.g., `myproject-1`)
+- `DASHBOARD_DIR` - Path to the dashboards directory (defaults to `./dashboards`)
+
+### Config File
+
+The tool reads Grafana server URL and credentials from a YAML config file (in grafanactl format), which is located at one of:
+- `$XDG_CONFIG_HOME/grafanactl/config.yaml`
+- `$HOME/.config/grafanactl/config.yaml`
+- `$XDG_CONFIG_DIRS/grafanactl/config.yaml`
+
+Example config:
+```yaml
+contexts:
+  myproject-1:
+    grafana:
+      server: https://grafana.example.com
+      user: admin
+      password: secret123
+      org-id: 1
+current-context: myproject-1
 ```
 
-This tells the module where to find your dashboard source files. The scripts will read this value to determine where to write downloaded dashboards and read dashboards for upload.
+The `GRAFANA_CONTEXT` environment variable should match a context name in your config file.
 
 ## Conflict Detection
 
@@ -206,7 +228,7 @@ This makes dashboard development natural while keeping large content blocks main
 
 ## Implementation Details
 
-- **Terraform** manages dashboard deployment and folder structure
+- **Grafana API** manages dashboard deployment via direct API calls
 - **Jsonnet** provides templating and imports for dashboards
 - **Python** handles EXTERNAL content extraction with hash-based change detection and orchestrates the download/upload workflow
 
@@ -214,10 +236,9 @@ This makes dashboard development natural while keeping large content blocks main
 
 - Python 3.8 or higher
 - [uv](https://docs.astral.sh/uv/) (for running with uvx)
-- Terraform (must be installed and in PATH)
-- Jsonnet (must be installed and in PATH)
+- A config file (in grafanactl format) with your Grafana credentials
 
-Python dependencies are automatically managed by uv when using uvx.
+All Python dependencies (including jsonnet) are automatically managed by uv when using uvx.
 
 ## Development
 
@@ -256,7 +277,7 @@ The test suite includes:
 - Unit tests for all core functions
 - Integration tests for main workflows
 - Test fixtures for sample Grafana dashboards
-- Mock objects for Terraform and external dependencies
+- Mock objects for Grafana API and external dependencies
 
 Coverage reports are generated in `htmlcov/` directory.
 
@@ -271,5 +292,48 @@ tests/
 │   └── sample_dashboard_concat.json
 ├── test_extract_external_content.py     # Tests for extraction logic
 ├── test_upload_dashboards.py            # Tests for upload workflow
-└── test_download_dashboards.py          # Tests for download workflow
+├── test_download_dashboards.py          # Tests for download workflow
+└── test_utils.py                        # Tests for utility functions
 ```
+
+### Code Quality
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for both linting and formatting.
+
+**Linting:**
+```bash
+# Check for linting issues
+uv run ruff check src/ tests/
+
+# Auto-fix linting issues
+uv run ruff check --fix src/ tests/
+```
+
+**Formatting:**
+```bash
+# Format code
+uv run ruff format src/ tests/
+
+# Check formatting without making changes
+uv run ruff format --check src/ tests/
+```
+
+**Run both:**
+```bash
+# Lint and format in one go
+uv run ruff check --fix src/ tests/ && uv run ruff format src/ tests/
+```
+
+**Configuration:**
+- Line length: 120 characters
+- Enabled rules: pycodestyle, pyflakes, isort, pep8-naming, pyupgrade, flake8-commas
+- Trailing commas: Automatically added to multi-line collections
+
+See `[tool.ruff]` section in `pyproject.toml` for full configuration.
+
+### Dependencies
+
+The project has minimal dependencies:
+- `requests` - For Grafana API calls
+- `pyyaml` - For reading grafanactl config files
+- `jsonnet` - For compiling jsonnet templates to JSON

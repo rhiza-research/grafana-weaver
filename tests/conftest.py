@@ -74,10 +74,8 @@ def dashboards_structure(temp_dir):
     assets_dir.mkdir(parents=True)
 
     return {
-        'base': dashboards_base,
-        'src': src_dir,
-        'build': build_dir,
-        'assets': assets_dir
+        "base": dashboards_base,
+        "src": src_dir,
+        "build": build_dir,
+        "assets": assets_dir,
     }
-
-

@@ -1,76 +1,150 @@
 """Tests for utils.py module."""
 
 import pytest
-from pathlib import Path
+import yaml
 
-from grafana_weaver.utils import get_workspace, get_terraform_dir
+from grafana_weaver.utils import get_grafana_config, get_grafana_context
 
 
-class TestGetWorkspace:
-    """Tests for get_workspace function."""
+class TestGetGrafanaContext:
+    """Tests for get_grafana_context function."""
 
-    def test_workspace_from_env(self, monkeypatch):
-        """Workspace should be read from environment variable."""
-        monkeypatch.setenv("WORKSPACE", "production")
-        workspace = get_workspace()
-        assert workspace == "production"
+    def test_context_from_grafana_context_env(self, monkeypatch):
+        """Context should be read from GRAFANA_CONTEXT environment variable."""
+        monkeypatch.setenv("GRAFANA_CONTEXT", "myproject-1")
+        context = get_grafana_context()
+        assert context == "myproject-1"
 
-    def test_workspace_prompt(self, monkeypatch):
-        """Workspace should be prompted if not in environment."""
-        monkeypatch.delenv("WORKSPACE", raising=False)
-        monkeypatch.setattr('builtins.input', lambda _: "dev")
+    def test_context_prompt(self, monkeypatch):
+        """Context should be prompted if not in environment."""
+        monkeypatch.delenv("GRAFANA_CONTEXT", raising=False)
+        monkeypatch.setattr("builtins.input", lambda _: "myproject-1")
 
-        workspace = get_workspace()
-        assert workspace == "dev"
+        context = get_grafana_context()
+        assert context == "myproject-1"
 
-    def test_empty_workspace_exits(self, monkeypatch):
-        """Empty workspace should exit with error."""
-        monkeypatch.delenv("WORKSPACE", raising=False)
-        monkeypatch.setattr('builtins.input', lambda _: "")
+    def test_empty_context_exits(self, monkeypatch):
+        """Empty context should exit with error."""
+        monkeypatch.delenv("GRAFANA_CONTEXT", raising=False)
+        monkeypatch.setattr("builtins.input", lambda _: "")
 
         with pytest.raises(SystemExit) as exc_info:
-            get_workspace()
+            get_grafana_context()
         assert exc_info.value.code == 1
 
 
-class TestGetTerraformDir:
-    """Tests for get_terraform_dir function."""
+class TestGetGrafanaConfig:
+    """Tests for get_grafana_config function."""
 
-    def test_terraform_dir_from_env(self, monkeypatch, tmp_path):
-        """Terraform directory should be read from environment variable."""
-        terraform_dir = tmp_path / "custom-terraform"
-        terraform_dir.mkdir()
-        monkeypatch.setenv("TERRAFORM_DIR", str(terraform_dir))
+    def test_config_from_xdg_config_home(self, monkeypatch, tmp_path):
+        """Config should be read from XDG_CONFIG_HOME location."""
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        grafanactl_dir = config_dir / "grafanactl"
+        grafanactl_dir.mkdir()
+        config_file = grafanactl_dir / "config.yaml"
 
-        result = get_terraform_dir()
-        assert result == terraform_dir
+        config_data = {
+            "contexts": {
+                "myproject-1": {
+                    "grafana": {"server": "https://grafana.example.com", "user": "admin", "password": "secret123"},
+                },
+            },
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
 
-    def test_terraform_dir_default_location(self, monkeypatch, tmp_path):
-        """Terraform directory should use default location if env not set."""
-        monkeypatch.delenv("TERRAFORM_DIR", raising=False)
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+        monkeypatch.delenv("HOME", raising=False)
 
-        # Create the default location
-        default_dir = tmp_path / "infrastructure" / "terraform-config"
-        default_dir.mkdir(parents=True)
+        result = get_grafana_config("myproject-1")
+        assert result["server"] == "https://grafana.example.com"
+        assert result["user"] == "admin"
+        assert result["password"] == "secret123"
 
-        result = get_terraform_dir()
-        assert result == default_dir
+    def test_config_from_home_config(self, monkeypatch, tmp_path):
+        """Config should be read from HOME/.config location."""
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        config_dir = home_dir / ".config" / "grafanactl"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config.yaml"
 
-    def test_terraform_dir_not_found_exits(self, monkeypatch, tmp_path):
-        """Should exit with error if terraform directory not found."""
-        monkeypatch.delenv("TERRAFORM_DIR", raising=False)
-        monkeypatch.chdir(tmp_path)
+        config_data = {
+            "contexts": {
+                "test-context": {
+                    "grafana": {"server": "https://test.example.com", "user": "testuser", "password": "testpass"},
+                },
+            },
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home_dir))
+
+        result = get_grafana_config("test-context")
+        assert result["server"] == "https://test.example.com"
+        assert result["user"] == "testuser"
+
+    def test_config_file_not_found_exits(self, monkeypatch, tmp_path):
+        """Should exit with error if config file not found."""
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
 
         with pytest.raises(SystemExit) as exc_info:
-            get_terraform_dir()
+            get_grafana_config("test-context")
         assert exc_info.value.code == 1
 
-    def test_terraform_dir_env_not_found_exits(self, monkeypatch, tmp_path):
-        """Should exit with error if env var points to nonexistent directory."""
-        nonexistent_dir = tmp_path / "does-not-exist"
-        monkeypatch.setenv("TERRAFORM_DIR", str(nonexistent_dir))
+    def test_context_not_found_exits(self, monkeypatch, tmp_path):
+        """Should exit with error if context doesn't exist."""
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        config_dir = home_dir / ".config" / "grafanactl"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config.yaml"
+
+        config_data = {
+            "contexts": {
+                "other-context": {
+                    "grafana": {"server": "https://other.example.com", "user": "user", "password": "pass"},
+                },
+            },
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home_dir))
 
         with pytest.raises(SystemExit) as exc_info:
-            get_terraform_dir()
+            get_grafana_config("nonexistent-context")
+        assert exc_info.value.code == 1
+
+    def test_missing_required_fields_exits(self, monkeypatch, tmp_path):
+        """Should exit with error if config is missing required fields."""
+        home_dir = tmp_path / "home"
+        home_dir.mkdir()
+        config_dir = home_dir / ".config" / "grafanactl"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config.yaml"
+
+        config_data = {
+            "contexts": {
+                "incomplete-context": {
+                    "grafana": {
+                        "server": "https://incomplete.example.com",
+                        # Missing user and password
+                    },
+                },
+            },
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home_dir))
+
+        with pytest.raises(SystemExit) as exc_info:
+            get_grafana_config("incomplete-context")
         assert exc_info.value.code == 1

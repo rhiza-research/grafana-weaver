@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Upload Grafana dashboards from Jsonnet templates to Grafana via Terraform."""
+"""Upload Grafana dashboards from Jsonnet templates to Grafana."""
 
+import base64
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
-from python_terraform import Terraform, IsFlagged
 
-from .utils import get_workspace, get_terraform_dir
+import _jsonnet
+import requests
+
+from .utils import get_grafana_config, get_grafana_context
 
 
 def build_jsonnet_dashboards(dashboards_base_dir: Path) -> None:
@@ -40,75 +42,130 @@ def build_jsonnet_dashboards(dashboards_base_dir: Path) -> None:
         # Output JSON file path
         output_file = build_path / f"{dashboard_file.stem}.json"
 
-        # Build jsonnet to JSON using jsonnet command
+        # Build jsonnet to JSON using Python jsonnet library
         try:
-            # Run jsonnet command
-            result = subprocess.run(
-                ["jsonnet", str(dashboard_file)],
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            # Evaluate jsonnet file
+            json_str = _jsonnet.evaluate_file(str(dashboard_file))
 
             # Parse and pretty-print the JSON
-            json_data = json.loads(result.stdout)
-            with open(output_file, 'w') as f:
+            json_data = json.loads(json_str)
+            with open(output_file, "w") as f:
                 json.dump(json_data, f, indent=2)
 
-        except subprocess.CalledProcessError as e:
-            print(f"Error building {dashboard_file}: {e.stderr}")
+        except RuntimeError as e:
+            print(f"Error building {dashboard_file}: {e}")
             sys.exit(1)
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON from {dashboard_file}: {e}")
             sys.exit(1)
 
 
+def upload_dashboards_to_grafana(dashboards_base_dir: Path, context_name: str) -> None:
+    """
+    Upload built dashboards to Grafana using the Grafana API.
+
+    Args:
+        dashboards_base_dir: Base directory containing built dashboards
+        context_name: grafanactl context name (e.g., 'myproject-1')
+    """
+    print("\nUploading dashboards to Grafana...")
+
+    # Get Grafana config from grafanactl config file
+    grafana_config = get_grafana_config(context_name)
+
+    grafana_url = grafana_config["server"].rstrip("/")
+    username = grafana_config["user"]
+    password = grafana_config["password"]
+
+    # Use Basic auth
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/json",
+    }
+
+    # Find all built JSON files
+    build_dir = dashboards_base_dir / "build"
+    if not build_dir.exists():
+        print(f"Error: build directory not found at {build_dir}")
+        sys.exit(1)
+
+    json_files = list(build_dir.rglob("*.json"))
+    if not json_files:
+        print(f"No JSON files found in {build_dir}")
+        return
+
+    print(f"Found {len(json_files)} dashboards to upload")
+
+    success_count = 0
+    error_count = 0
+
+    for json_file in json_files:
+        # Read the dashboard JSON
+        with open(json_file) as f:
+            dashboard_json = json.load(f)
+
+        # Prepare the dashboard payload
+        payload = {
+            "dashboard": dashboard_json,
+            "overwrite": True,
+            "message": "Updated by grafana-weaver",
+        }
+
+        # Get folder name if dashboard is in a subdirectory
+        rel_path = json_file.relative_to(build_dir)
+        if rel_path.parent != Path("."):
+            # TODO: We might want to create/find the folder ID and add it to payload
+            # For now, dashboards will go to General folder
+            pass
+
+        # Upload the dashboard
+        response = requests.post(f"{grafana_url}/api/dashboards/db", headers=headers, json=payload)
+
+        if response.status_code in [200, 201]:
+            print(f"  ✓ Uploaded: {dashboard_json.get('title', json_file.name)}")
+            success_count += 1
+        else:
+            print(f"  ✗ Failed to upload {json_file.name}: {response.status_code} {response.text}")
+            error_count += 1
+
+    print(f"\nUpload complete: {success_count} succeeded, {error_count} failed")
+
+    if error_count > 0:
+        sys.exit(1)
+
+
 def main():
     """Main entry point for uploading dashboards."""
-    # Get terraform directory
-    terraform_dir = get_terraform_dir()
+    # Get or prompt for grafanactl context name
+    context_name = get_grafana_context()
 
-    # Get or prompt for workspace
-    workspace = get_workspace()
-
-    # Initialize Terraform
-    tf = Terraform(working_dir=str(terraform_dir))
-
-    # Select or create workspace
-    print(f"Selecting workspace: {workspace}")
-    return_code, stdout, stderr = tf.workspace("select", "-or-create=true", workspace)
-    if return_code != 0:
-        print(f"Error selecting workspace: {stderr}")
-        sys.exit(1)
-
-    # Get dashboards path from terraform output
-    return_code, output, stderr = tf.output_cmd("dashboards_base_path", json=IsFlagged)
-    if return_code != 0:
-        print(f"Error getting dashboards_base_path output: {stderr}")
-        sys.exit(1)
-
-    # Parse the JSON output - terraform returns a string directly when querying a specific output
-    output_data = json.loads(output)
-    # If it's a dict with 'value' key, extract it; otherwise use the data as-is
-    if isinstance(output_data, dict) and "value" in output_data:
-        dashboards_base_path = output_data["value"]
+    # Get dashboards directory from environment or use default
+    dashboard_dir_str = os.environ.get("DASHBOARD_DIR")
+    if dashboard_dir_str:
+        dashboards_base_dir = Path(dashboard_dir_str)
     else:
-        dashboards_base_path = output_data
-    dashboards_base_dir = Path(dashboards_base_path)
+        # Default: dashboards directory in current working directory
+        dashboards_base_dir = Path.cwd() / "dashboards"
+
+    if not dashboards_base_dir.exists():
+        print(f"Error: dashboards directory not found at {dashboards_base_dir}")
+        sys.exit(1)
+
+    print("=" * 42)
+    print("Uploading Grafana dashboards...")
+    print("=" * 42)
     print(f"Using dashboards directory: {dashboards_base_dir}")
 
     # Build all jsonnet files
     build_jsonnet_dashboards(dashboards_base_dir)
 
-    # Apply terraform changes
-    print("\nApplying Terraform configuration...")
-    return_code, stdout, stderr = tf.apply(skip_plan=True, auto_approve=True)
+    # Upload dashboards to Grafana
+    upload_dashboards_to_grafana(dashboards_base_dir, context_name)
 
-    if return_code != 0:
-        print(f"Error applying Terraform: {stderr}")
-        sys.exit(1)
-
-    print("\nDashboards uploaded successfully!")
+    print("\n" + "=" * 42)
+    print("Dashboards uploaded successfully!")
+    print("=" * 42)
 
 
 if __name__ == "__main__":

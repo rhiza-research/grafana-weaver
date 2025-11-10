@@ -1,50 +1,103 @@
 #!/usr/bin/env python3
 """Download Grafana dashboards and extract external content."""
 
+import base64
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from python_terraform import Terraform, IsFlagged
 
-from .utils import get_workspace, get_terraform_dir
+import requests
+
+from .extract_external_content import process_json_file
+from .utils import get_grafana_config, get_grafana_context
 
 
-def download_dashboards_from_grafana(tf: Terraform, downloaded_dir: Path) -> None:
+def download_dashboards_from_grafana(downloaded_dir: Path, context_name: str) -> None:
     """
-    Download dashboards from Grafana using Terraform.
+    Download dashboards from Grafana using the Grafana API.
 
     Args:
-        tf: Terraform instance
         downloaded_dir: Directory to download dashboards to
+        context_name: grafanactl context name (e.g., 'myproject-1')
     """
     print("\nStep 1: Downloading dashboards from Grafana...")
-    print("Exporting dashboards to local files...")
 
-    # Export dashboards (this only creates local files, doesn't touch Grafana)
-    return_code, stdout, stderr = tf.apply(
-        skip_plan=True,
-        auto_approve=True,
-        var={
-            "dashboard_export_enabled": True,
-            "dashboard_export_dir": str(downloaded_dir)
-        }
-    )
+    # Get Grafana config from grafanactl config file
+    grafana_config = get_grafana_config(context_name)
 
-    if return_code != 0:
-        print(f"Error exporting dashboards: {stderr}")
+    grafana_url = grafana_config["server"].rstrip("/")
+    username = grafana_config["user"]
+    password = grafana_config["password"]
+
+    # Use Basic auth
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    headers = {"Authorization": f"Basic {credentials}"}
+
+    # Fetch all dashboards
+    print("Fetching dashboard list...")
+    response = requests.get(f"{grafana_url}/api/search?type=dash-db", headers=headers)
+    if response.status_code != 200:
+        print(f"Error fetching dashboard list: {response.status_code} {response.text}")
         sys.exit(1)
 
+    dashboards = response.json()
+    print(f"Found {len(dashboards)} dashboards")
 
-def process_dashboards(downloaded_dir: Path) -> None:
+    # Create download directory
+    downloaded_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize names for file paths
+    def sanitize(name):
+        return name.lower().replace(" ", "-").replace("/", "-")
+
+    # Download each dashboard
+    for dash in dashboards:
+        uid = dash["uid"]
+        folder_title = dash.get("folderTitle", "")
+
+        # Fetch full dashboard JSON
+        dash_response = requests.get(f"{grafana_url}/api/dashboards/uid/{uid}", headers=headers)
+        if dash_response.status_code != 200:
+            print(f"Warning: Failed to fetch dashboard {uid}: {dash_response.status_code}")
+            continue
+
+        dashboard_data = dash_response.json()
+        dashboard_json = dashboard_data["dashboard"]
+
+        # Try to get folder info from the dashboard metadata
+        meta = dashboard_data.get("meta", {})
+        if not folder_title and meta.get("folderTitle"):
+            folder_title = meta["folderTitle"]
+
+        title = sanitize(dashboard_json["title"])
+
+        # Build file path with optional folder
+        if folder_title and folder_title != "General":
+            folder = sanitize(folder_title)
+            file_path = downloaded_dir / folder / f"{title}.json"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            file_path = downloaded_dir / f"{title}.json"
+
+        # Write dashboard JSON
+        with open(file_path, "w") as f:
+            json.dump(dashboard_json, f, indent=2)
+
+        print(f"  Downloaded: {file_path.relative_to(downloaded_dir.parent)}")
+
+    print(f"\nDashboard download complete! ({len(dashboards)} dashboards)")
+
+
+def process_dashboards(downloaded_dir: Path, output_dir: Path) -> None:
     """
     Process downloaded dashboards to extract external content.
 
     Args:
         downloaded_dir: Directory containing downloaded JSON files
+        output_dir: Base output directory for processed dashboards (e.g., ./dashboards)
     """
     print("\nStep 2: Processing dashboards to extract external content...")
 
@@ -55,88 +108,50 @@ def process_dashboards(downloaded_dir: Path) -> None:
         print(f"No JSON files found in {downloaded_dir}")
         return
 
-    # Get the extract script from the package
-    extract_script = Path(__file__).parent / "extract_external_content.py"
-    if not extract_script.exists():
-        print(f"Error: extract_external_content.py not found at {extract_script}")
-        sys.exit(1)
-
     for json_file in json_files:
-        # Get the relative path from the downloaded directory
-        rel_path = json_file.relative_to(downloaded_dir)
-        base_dir = rel_path.parent if rel_path.parent != Path('.') else None
-
         print(f"Processing: {json_file}")
 
-        # Run the extraction script
-        cmd = [sys.executable, str(extract_script), str(json_file)]
-        if base_dir:
-            cmd.append(str(base_dir))
+        # Process the JSON file directly as a Python function call
+        # - pass downloaded_dir as base_dir to preserve folder structure
+        # - pass output_dir to specify where to write the jsonnet files
+        success = process_json_file(str(json_file), base_dir=str(downloaded_dir), output_dir=str(output_dir))
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-
-        if result.returncode != 0:
-            print(f"Error processing {json_file}:")
-            print(result.stderr)
+        if not success:
+            print(f"Error processing {json_file}")
             sys.exit(1)
-
-        # Print the output from the extraction script
-        if result.stdout:
-            print(result.stdout)
 
 
 def main():
     """Main entry point for downloading dashboards."""
-    # Get terraform directory
-    terraform_dir = get_terraform_dir()
+    # Get or prompt for grafanactl context name
+    context_name = get_grafana_context()
+
+    # Get dashboards directory from environment or use default
+    dashboard_dir_str = os.environ.get("DASHBOARD_DIR")
+    if dashboard_dir_str:
+        dashboards_base_dir = Path(dashboard_dir_str)
+    else:
+        # Default: dashboards directory in current working directory
+        dashboards_base_dir = Path.cwd() / "dashboards"
+
+    print("=" * 42)
+    print("Downloading Grafana dashboards...")
+    print("=" * 42)
+    print(f"Output directory: {dashboards_base_dir}")
 
     # Create temporary directory for downloads
     downloaded_dir = Path(tempfile.mkdtemp())
 
     try:
-        # Get or prompt for workspace
-        workspace = get_workspace()
+        # Download dashboards from Grafana
+        download_dashboards_from_grafana(downloaded_dir, context_name)
 
-        print("=" * 42)
-        print("Downloading Grafana dashboards...")
-        print("=" * 42)
-
-        # Initialize Terraform
-        tf = Terraform(working_dir=str(terraform_dir))
-
-        # Select or create workspace
-        print(f"Selecting workspace: {workspace}")
-        return_code, stdout, stderr = tf.workspace("select", "-or-create=true", workspace)
-        if return_code != 0:
-            print(f"Error selecting workspace: {stderr}")
-            sys.exit(1)
-
-        # Get dashboards path from terraform output
-        return_code, output, stderr = tf.output_cmd("dashboards_base_path", json=IsFlagged)
-        if return_code != 0:
-            print(f"Error getting dashboards_base_path output: {stderr}")
-            sys.exit(1)
-
-        # Parse the JSON output - terraform returns a string directly when querying a specific output
-        output_data = json.loads(output)
-        # If it's a dict with 'value' key, extract it; otherwise use the data as-is
-        if isinstance(output_data, dict) and "value" in output_data:
-            dashboards_base_path = output_data["value"]
-        else:
-            dashboards_base_path = output_data
-        dashboards_base_dir = Path(dashboards_base_path)
-        print(f"Using dashboards directory: {dashboards_base_dir}")
-
-        # Download dashboards
-        download_dashboards_from_grafana(tf, downloaded_dir)
-
-        # Process dashboards to extract external content
-        process_dashboards(downloaded_dir)
+        # Process dashboards to extract external content (outputs to dashboards/src/)
+        process_dashboards(downloaded_dir, dashboards_base_dir)
 
         print("\n" + "=" * 42)
         print("Dashboard download complete!")
         print("=" * 42)
-        print(f"  - Downloaded to: {downloaded_dir}/")
         print(f"  - Jsonnet templates: {dashboards_base_dir}/src/")
         print(f"  - Assets: {dashboards_base_dir}/src/assets/")
 
