@@ -1,0 +1,24 @@
+{
+  "uid": "test-dashboard",
+  "id": 123,
+  "title": "Test Dashboard",
+  "panels": [
+    {
+      "id": 1,
+      "type": "graph",
+      "title": "Test Panel",
+      "targets": [
+        {
+          "rawSql": "-- EXTERNAL\nSELECT * FROM metrics WHERE time > NOW() - INTERVAL '1 hour'"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL\nfunction renderPanel() {\n  return 'Hello World';\n}"
+      }
+    }
+  ]
+}

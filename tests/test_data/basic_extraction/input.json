@@ -1,0 +1,14 @@
+{
+  "uid": "test-basic",
+  "id": 123,
+  "title": "Basic Extraction Test",
+  "panels": [
+    {
+      "id": 1,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL\nfunction renderPanel() {\n  return 'Hello World';\n}"
+      }
+    }
+  ]
+}

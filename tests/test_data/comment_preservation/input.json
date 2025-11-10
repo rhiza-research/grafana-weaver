@@ -1,0 +1,16 @@
+{
+  "uid": "test-comments",
+  "id": 111,
+  "title": "Comment Preservation Test",
+  "panels": [
+    {
+      "id": 1,
+      "type": "graph",
+      "targets": [
+        {
+          "rawSql": "-- EXTERNAL\nSELECT * FROM metrics"
+        }
+      ]
+    }
+  ]
+}

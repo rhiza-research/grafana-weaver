@@ -1,0 +1,14 @@
+{
+  "uid": "test-123",
+  "id": 999,
+  "title": "Test Dashboard",
+  "panels": [
+    {
+      "id": 1,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL\nfunction render() { return 'test'; }"
+      }
+    }
+  ]
+}

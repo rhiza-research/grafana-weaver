@@ -1,0 +1,14 @@
+{
+  "uid": "test-params",
+  "id": 789,
+  "title": "Parameterized Filename Test",
+  "panels": [
+    {
+      "id": 10,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL({panel_id: \"custom\", key: \"config\"})\nconst config = {\n  theme: 'dark'\n};"
+      }
+    }
+  ]
+}

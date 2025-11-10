@@ -1,0 +1,14 @@
+{
+  "uid": "test-custom",
+  "id": 456,
+  "title": "Custom Filename Test",
+  "panels": [
+    {
+      "id": 5,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL:shared-utils.js\nconst utils = {\n  format: (x) => x.toFixed(2)\n};"
+      }
+    }
+  ]
+}

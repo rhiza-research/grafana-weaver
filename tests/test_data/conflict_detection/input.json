@@ -1,0 +1,19 @@
+{
+  "uid": "test-conflict",
+  "panels": [
+    {
+      "id": 1,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL:shared.js\nconst version = 1;"
+      }
+    },
+    {
+      "id": 2,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL:shared.js\nconst version = 2;"
+      }
+    }
+  ]
+}

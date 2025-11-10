@@ -4,12 +4,6 @@ variable "dashboard_export_enabled" {
   default = false
 }
 
-variable "dashboard_import_enabled" {
-  description = "Enable dashboard import from local files"
-  type = bool
-  default = false
-}
-
 variable "dashboard_export_dir" {
   description = "Directory to export dashboards to (absolute path)"
   type = string
@@ -39,21 +33,15 @@ variable "dashboards_base_path" {
   default = "../../dashboards/"
 }
 
-variable "datasource_config" {
-  description = "The datasource config"
-  type = map(string)
-  default = {}
-}
-
 # these are only used for the dashboard message, nothing critical.
 variable "repo_name" {
-  description = "The name of the git repository"
+  description = "The name of the git repository (only used for the dashboard message)"
   type = string
-  default = "sheerwater-benchmarking"
+  default = ""
 }
 
 variable "pr_number" {
-  description = "The number of the pull request"
+  description = "The number of the pull request (only used for the dashboard message)"
   type = string
   default = ""
 }

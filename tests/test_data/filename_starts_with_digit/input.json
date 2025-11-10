@@ -1,0 +1,14 @@
+{
+  "uid": "test-digit",
+  "id": 555,
+  "title": "Filename Starting with Digit Test",
+  "panels": [
+    {
+      "id": 7,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL:123-config.js\nconst config = {version: '1.23'};"
+      }
+    }
+  ]
+}

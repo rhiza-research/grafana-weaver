@@ -643,7 +643,7 @@ def create_jsonnet(data, modifications):
     return '\n'.join(local_vars) + '\n\n' + json_content if local_vars else json_content
 
 
-def process_json_file(json_file_path, base_dir=None):
+def process_json_file(json_file_path, base_dir=None, output_dir=None):
     """
     Main entry point: process a dashboard JSON file to extract EXTERNAL content.
 
@@ -656,34 +656,36 @@ def process_json_file(json_file_path, base_dir=None):
 
     Args:
         json_file_path: Path to the Grafana dashboard JSON file
-        base_dir: Optional base directory name for organizing output
-                  (e.g., "dashboards2" to create src/dashboards2/ subdirectory)
+        base_dir: Optional base input directory - used to detect subdirectory structure from input
+                  to preserve in output (e.g., if base_dir="/input" and file is "/input/team1/dash.json",
+                  output will be created at "output_dir/src/team1/dash.jsonnet")
+        output_dir: Optional output directory root (defaults to "dashboards" in current working directory)
+                    Output structure: {output_dir}/src/dashboard.jsonnet and {output_dir}/src/assets/
 
     Returns:
         True if successful, False if errors occurred
 
     Directory structure created:
-        dashboards/
-        ├── src/
-        │   ├── assets/           # All extracted content files
-        │   │   ├── dashboard-id-panel-id-script.js
-        │   │   ├── dashboard-id-query.sql
-        │   │   └── ...
-        │   ├── dashboard-name.jsonnet  # Generated template
-        │   └── [base_dir]/       # If base_dir specified
-        │       └── dashboard-name.jsonnet
+        {output_dir}/
+        └── src/
+            ├── assets/           # All extracted content files (shared across all dashboards)
+            │   ├── dashboard-id-panel-id-script.js
+            │   ├── dashboard-id-query.sql
+            │   └── ...
+            ├── dashboard-name.jsonnet      # Templates in root if no base_dir
+            └── [subdirs]/                  # Preserved subdirectory structure if base_dir provided
+                └── dashboard-name.jsonnet
 
     Examples:
-        >>> # Basic usage
+        >>> # Basic usage - creates dashboards/src/dashboard.jsonnet in current directory
         >>> process_json_file("dashboard.json")
-        Processing: dashboard.json
-        Dashboard ID: ee2jzeymn1o8wf
-        ...
-        ✓ Jsonnet template creation completed successfully
 
-        >>> # With base_dir for organization
-        >>> process_json_file("../../dashboards2/home.json", "dashboards2")
-        # Creates: src/dashboards2/home.jsonnet
+        >>> # With output_dir - creates /tmp/output/src/dashboard.jsonnet
+        >>> process_json_file("dashboard.json", output_dir="/tmp/output")
+
+        >>> # With base_dir to preserve subdirectory structure
+        >>> # If file is /input/team1/dash.json, creates output_dir/src/team1/dash.jsonnet
+        >>> process_json_file("/input/team1/dash.json", base_dir="/input", output_dir="/output")
     """
     json_path = Path(json_file_path)
 
@@ -702,18 +704,33 @@ def process_json_file(json_file_path, base_dir=None):
         return False
 
     # Set up output directory structure
-    script_dir = Path(__file__).parent.parent
-    src_dir = script_dir / "dashboards" / "src"
-    assets_dir = src_dir / "assets"  # All assets go in shared assets/ dir
-    assets_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir:
+        root_dir = Path(output_dir)
+    else:
+        # Default: dashboards folder in current working directory
+        root_dir = Path.cwd() / "dashboards"
 
-    # base_dir is the relative subfolder path (e.g., "deprecated" or ".")
-    # If it's ".", put in root of src/, otherwise create subfolder
-    if base_dir and base_dir != ".":
-        template_dir = src_dir / base_dir
+    src_dir = root_dir / "src"
+
+    # Detect subdirectory structure if base_dir is provided
+    if base_dir:
+        json_path_abs = Path(json_file_path).resolve()
+        base_dir_abs = Path(base_dir).resolve()
+        try:
+            # Get relative path from base_dir to the json file
+            rel_path = json_path_abs.parent.relative_to(base_dir_abs)
+            # Preserve subdirectory structure in output
+            template_dir = src_dir / rel_path
+        except ValueError:
+            # File is not under base_dir, just use src_dir
+            template_dir = src_dir
     else:
         template_dir = src_dir
 
+    # Assets always go in shared src/assets directory
+    assets_dir = src_dir / "assets"
+
+    assets_dir.mkdir(parents=True, exist_ok=True)
     template_dir.mkdir(parents=True, exist_ok=True)
 
     # Print processing header
@@ -776,18 +793,29 @@ def process_json_file(json_file_path, base_dir=None):
     return True
 
 
-if __name__ == "__main__":
-    # Command-line interface
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python extract_external_content.py <json_file> [base_dir]")
-        print("Example: python extract_external_content.py dashboard.json")
-        print("Example: python extract_external_content.py ../../dashboards2/home.json dashboards2")
-        sys.exit(1)
+def main():
+    """Command-line entry point for extract-external-content."""
+    import argparse
 
-    # Parse arguments
-    json_file = sys.argv[1]
-    base_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    parser = argparse.ArgumentParser(
+        description="Extract EXTERNAL content from Grafana dashboard JSON files"
+    )
+    parser.add_argument("json_file", help="Path to the Grafana dashboard JSON file")
+    parser.add_argument(
+        "--base-dir",
+        help="Base input directory to detect subdirectory structure to preserve in output"
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory root (defaults to 'dashboards' in current directory)"
+    )
+
+    args = parser.parse_args()
 
     # Process the file and exit with appropriate status code
-    success = process_json_file(json_file, base_dir)
+    success = process_json_file(args.json_file, base_dir=args.base_dir, output_dir=args.output_dir)
     sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()

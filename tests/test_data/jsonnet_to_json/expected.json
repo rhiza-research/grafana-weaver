@@ -1,0 +1,22 @@
+{
+  "uid": "test-build",
+  "title": "Build Test Dashboard",
+  "panels": [
+    {
+      "id": 1,
+      "type": "custom",
+      "options": {
+        "script": "function renderPanel() {\n  return 'Hello from Jsonnet';\n}\n"
+      }
+    },
+    {
+      "id": 2,
+      "type": "graph",
+      "targets": [
+        {
+          "rawSql": "SELECT \n  time,\n  value\nFROM metrics\nWHERE time > NOW() - INTERVAL '1 hour'\n"
+        }
+      ]
+    }
+  ]
+}

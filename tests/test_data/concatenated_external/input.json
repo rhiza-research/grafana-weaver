@@ -1,0 +1,14 @@
+{
+  "uid": "test-concat",
+  "id": 999,
+  "title": "Concatenated External Test",
+  "panels": [
+    {
+      "id": 1,
+      "type": "custom",
+      "options": {
+        "script": "// EXTERNAL:colors.js\nconst COLORS = {primary: '#3498db'};\n// EXTERNAL:utils.js\nconst utils = {render: () => {}};"
+      }
+    }
+  ]
+}

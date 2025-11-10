@@ -9,12 +9,46 @@ This system allows you to:
 2. **Edit** dashboard configuration and assets as code
 3. **Upload** changes back to Grafana via Terraform
 
+## Installation
+
+Grafana-Weaver is a pure Python project that can be run directly using `uvx` without installation:
+
+```bash
+# Download dashboards from Grafana
+uvx --from git+https://github.com/rhiza-research/grafana-weaver download-dashboards
+
+# Upload dashboards to Grafana
+uvx --from git+https://github.com/rhiza-research/grafana-weaver upload-dashboards
+```
+
+Or if you have the repository locally:
+
+```bash
+# From the repository root
+uvx --from . download-dashboards
+uvx --from . upload-dashboards
+```
+
+Alternatively, you can install it with uv:
+
+```bash
+uv pip install git+https://github.com/rhiza-research/grafana-weaver
+# Or from local directory
+uv pip install .
+```
+
 ## Workflow
 
 ### Download Dashboards from Grafana
 
+Using uvx (no installation required):
 ```bash
-./download-dashboards.sh
+WORKSPACE=production uvx --from . download-dashboards
+```
+
+Or if installed:
+```bash
+WORKSPACE=production download-dashboards
 ```
 
 This script:
@@ -24,8 +58,14 @@ This script:
 
 ### Upload Dashboards to Grafana
 
+Using uvx (no installation required):
 ```bash
-./upload-dashboards.sh
+WORKSPACE=production uvx --from . upload-dashboards
+```
+
+Or if installed:
+```bash
+WORKSPACE=production upload-dashboards
 ```
 
 This script:
@@ -99,9 +139,13 @@ SELECT * FROM metrics WHERE date > NOW() - INTERVAL '7 days'
 
 ```
 grafana-weaver/
-├── download-dashboards.sh      # Download from Grafana
-├── upload-dashboards.sh        # Upload to Grafana
-├── extract_external_content.py # Python script for extracting EXTERNAL content
+├── pyproject.toml              # Python project configuration
+├── src/
+│   └── grafana_weaver/
+│       ├── __init__.py
+│       ├── download_dashboards.py  # Download from Grafana
+│       ├── upload_dashboards.py    # Upload to Grafana
+│       └── extract_external_content.py  # Extract EXTERNAL content
 └── terraform_module/           # Terraform module for Grafana
 
 ../dashboards/
@@ -164,12 +208,68 @@ This makes dashboard development natural while keeping large content blocks main
 
 - **Terraform** manages dashboard deployment and folder structure
 - **Jsonnet** provides templating and imports for dashboards
-- **Python** handles EXTERNAL content extraction with hash-based change detection
-- **Bash scripts** orchestrate the download/upload workflow
+- **Python** handles EXTERNAL content extraction with hash-based change detection and orchestrates the download/upload workflow
 
 ## Requirements
 
-- Python 3
-- Terraform
-- Jsonnet
-- jq
+- Python 3.8 or higher
+- [uv](https://docs.astral.sh/uv/) (for running with uvx)
+- Terraform (must be installed and in PATH)
+- Jsonnet (must be installed and in PATH)
+
+Python dependencies are automatically managed by uv when using uvx.
+
+## Development
+
+### Running Tests
+
+This project uses pytest for testing. With uv, you can run tests without manual dependency installation:
+
+```bash
+# Run all tests with uv (installs deps automatically)
+uv run pytest
+
+# Run tests with coverage report
+uv run pytest --cov=grafana_weaver --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_extract_external_content.py
+
+# Run specific test
+uv run pytest tests/test_extract_external_content.py::TestComputeContentHash::test_same_content_same_hash
+
+# Run with verbose output
+uv run pytest -v
+```
+
+Or install in development mode:
+
+```bash
+# Install with development dependencies
+uv pip install -e ".[dev]"
+
+# Then run tests directly
+pytest
+```
+
+The test suite includes:
+- Unit tests for all core functions
+- Integration tests for main workflows
+- Test fixtures for sample Grafana dashboards
+- Mock objects for Terraform and external dependencies
+
+Coverage reports are generated in `htmlcov/` directory.
+
+### Project Structure
+
+```
+tests/
+├── conftest.py                          # Shared fixtures
+├── fixtures/                            # Sample data files
+│   ├── sample_dashboard.json
+│   ├── sample_dashboard_with_params.json
+│   └── sample_dashboard_concat.json
+├── test_extract_external_content.py     # Tests for extraction logic
+├── test_upload_dashboards.py            # Tests for upload workflow
+└── test_download_dashboards.py          # Tests for download workflow
+```
