@@ -199,8 +199,10 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        # python_terraform's output() method returns the extracted value directly
-        mock_tf.output.return_value = (0, str(dashboards_dir), "")
+        # output_cmd returns (ret_code, output, stderr) with JSON
+        import json
+        output_json = json.dumps({"value": str(dashboards_dir)})
+        mock_tf.output_cmd.return_value = (0, output_json, "")
         mock_tf.apply.return_value = (0, "Success", "")
 
         main()
@@ -210,7 +212,7 @@ class TestMain:
         mock_get_terraform_dir.assert_called_once()
         mock_terraform_class.assert_called_once_with(working_dir=str(terraform_dir))
         mock_tf.workspace.assert_called_once_with("select", "-or-create=true", "production")
-        mock_tf.output.assert_called_once_with("dashboards_base_path")
+        mock_tf.output_cmd.assert_called_once()
         mock_tf.apply.assert_called_once()
         mock_process.assert_called_once_with(downloads_dir)
 
@@ -271,7 +273,8 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        mock_tf.output.return_value = (1, "", "Output not found")
+        # output_cmd returns error code
+        mock_tf.output_cmd.return_value = (1, "", "Output not found")
 
         with pytest.raises(SystemExit) as exc_info:
             main()

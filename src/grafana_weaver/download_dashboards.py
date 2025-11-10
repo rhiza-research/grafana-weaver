@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Download Grafana dashboards and extract external content."""
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from python_terraform import Terraform
+from python_terraform import Terraform, IsFlagged
 
 from .utils import get_workspace, get_terraform_dir
 
@@ -111,11 +112,18 @@ def main():
             sys.exit(1)
 
         # Get dashboards path from terraform output
-        return_code, dashboards_base_path, stderr = tf.output("dashboards_base_path")
+        return_code, output, stderr = tf.output_cmd("dashboards_base_path", json=IsFlagged)
         if return_code != 0:
             print(f"Error getting dashboards_base_path output: {stderr}")
             sys.exit(1)
 
+        # Parse the JSON output - terraform returns a string directly when querying a specific output
+        output_data = json.loads(output)
+        # If it's a dict with 'value' key, extract it; otherwise use the data as-is
+        if isinstance(output_data, dict) and "value" in output_data:
+            dashboards_base_path = output_data["value"]
+        else:
+            dashboards_base_path = output_data
         dashboards_base_dir = Path(dashboards_base_path)
         print(f"Using dashboards directory: {dashboards_base_dir}")
 
