@@ -1,25 +1,22 @@
 terraform {
-  required_version = ">= 1.5.7"
+  required_version = ">= 1.0"
 }
 
 # Variables for the grafanactl context
 locals {
   context_name = "${var.repo_name}-${var.pr_number}"
+  config_file_path = pathexpand("~/.config/grafanactl/config.yaml")
 }
 
 # Read existing grafanactl config if it exists
-data "local_file" "existing_grafanactl_config" {
-  filename = pathexpand("~/.config/grafanactl/config.yaml")
-  count    = fileexists(pathexpand("~/.config/grafanactl/config.yaml")) ? 1 : 0
-}
-
 locals {
-  # Parse existing config or start with empty
-  existing_config = length(data.local_file.existing_grafanactl_config) > 0 ? yamldecode(data.local_file.existing_grafanactl_config[0].content) : { contexts = {} }
-
+  # Try to read and parse existing config, default to empty structure
+  existing_config_raw = try(file(local.config_file_path), "contexts: {}\n")
+  existing_config = yamldecode(local.existing_config_raw)
+  
   # Merge in the new context for this PR/repo
   merged_contexts = merge(
-    lookup(local.existing_config, "contexts", {}),
+    try(local.existing_config.contexts, {}),
     {
       "${local.context_name}" = {
         grafana = {
@@ -48,30 +45,9 @@ resource "local_file" "grafanactl_config" {
     contexts        = local.merged_contexts
     current-context = local.context_name
   })
-  filename        = pathexpand("~/.config/grafanactl/config.yaml")
+  filename        = local.config_file_path
   file_permission = "0600"
 }
-
-# I don't think we need to download dashboards via terraform now.
-# # Download dashboards from Grafana
-# resource "null_resource" "download_dashboards" {
-#   count = var.dashboard_download_enabled ? 1 : 0
-
-#   depends_on = [local_file.grafanactl_config]
-
-#   provisioner "local-exec" {
-#     command = "uvx --from git+https://github.com/rhiza-research/grafana-weaver download-dashboards"
-#     environment = {
-#       GRAFANA_CONTEXT = local.context_name
-#       DASHBOARD_DIR   = var.dashboards_base_path
-#     }
-#   }
-
-#   triggers = {
-#     config_hash = sha256(local_file.grafanactl_config.content)
-#     always_run  = timestamp()
-#   }
-# }
 
 # Upload dashboards to Grafana
 resource "null_resource" "upload_dashboards" {
