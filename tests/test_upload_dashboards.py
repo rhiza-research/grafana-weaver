@@ -131,7 +131,10 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        mock_tf.output.return_value = (0, str(dashboards_dir), "")
+        # Return JSON format for terraform output
+        import json
+        output_json = json.dumps({"dashboards_base_path": {"value": str(dashboards_dir)}})
+        mock_tf.output.return_value = (0, output_json, "")
         mock_tf.apply.return_value = (0, "Applied", "")
 
         main()
@@ -141,7 +144,7 @@ class TestMain:
         mock_get_terraform_dir.assert_called_once()
         mock_terraform_class.assert_called_once_with(working_dir=str(terraform_dir))
         mock_tf.workspace.assert_called_once_with("select", "-or-create=true", "production")
-        mock_tf.output.assert_called_once_with("dashboards_base_path", raw=True)
+        mock_tf.output.assert_called_once_with("dashboards_base_path")
         mock_build.assert_called_once_with(dashboards_dir)
         mock_tf.apply.assert_called_once()
 
@@ -221,7 +224,10 @@ class TestMain:
         mock_tf = MagicMock()
         mock_terraform_class.return_value = mock_tf
         mock_tf.workspace.return_value = (0, "Success", "")
-        mock_tf.output.return_value = (0, str(dashboards_dir), "")
+        # Return JSON format for terraform output
+        import json
+        output_json = json.dumps({"dashboards_base_path": {"value": str(dashboards_dir)}})
+        mock_tf.output.return_value = (0, output_json, "")
         mock_tf.apply.return_value = (1, "", "Apply failed")
 
         with pytest.raises(SystemExit) as exc_info:

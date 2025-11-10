@@ -82,12 +82,14 @@ def main():
         sys.exit(1)
 
     # Get dashboards path from terraform output
-    return_code, dashboards_base_path, stderr = tf.output("dashboards_base_path", raw=True)
+    return_code, output, stderr = tf.output("dashboards_base_path")
     if return_code != 0:
         print(f"Error getting dashboards_base_path output: {stderr}")
         sys.exit(1)
 
-    dashboards_base_dir = Path(dashboards_base_path.strip())
+    # Parse JSON output to get the value
+    dashboards_base_path = json.loads(output)["dashboards_base_path"]["value"]
+    dashboards_base_dir = Path(dashboards_base_path)
     print(f"Using dashboards directory: {dashboards_base_dir}")
 
     # Build all jsonnet files
