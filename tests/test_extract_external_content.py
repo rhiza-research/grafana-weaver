@@ -351,23 +351,16 @@ class TestExtractExternalIntegration:
     )
     def test_jsonnet_to_json_roundtrip(self, test_name, test_data):
         """Test building Jsonnet+assets back to JSON (round-trip test)."""
-        import subprocess
+        import _jsonnet
 
         test_data_dir = test_data.dir(test_name)
         input_jsonnet = test_data.expected_jsonnet(test_name)
         input_json_file = test_data.input_json(test_name)
         assets_dir = test_data.assets(test_name)
 
-        # Build jsonnet to JSON
-        result = subprocess.run(
-            ["jsonnet", str(input_jsonnet)],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(test_data_dir),  # Run from test_data dir so relative paths work
-        )
-
-        actual_json = json.loads(result.stdout)
+        # Build jsonnet to JSON using Python jsonnet library
+        json_str = _jsonnet.evaluate_file(str(input_jsonnet))
+        actual_json = json.loads(json_str)
 
         # The actual JSON will have the content from asset files which includes
         # the EXTERNAL line with filename. We need to update the expected JSON
