@@ -1,6 +1,6 @@
 [project]
 name = "grafana-weaver"
-version = "0.1.1"
+version = "0.1.2"
 description = "A system for managing Grafana dashboards as code using Jsonnet"
 readme = "README.md"
 requires-python = ">=3.10"
