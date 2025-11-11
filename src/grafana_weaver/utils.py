@@ -10,16 +10,59 @@ from pathlib import Path
 import yaml
 
 
-def get_grafana_context() -> str:
+def get_config_path() -> Path:
     """
-    Get or prompt for the grafanactl context name.
+    Get the path to the grafana-weaver config file.
+
+    Returns the path even if the file doesn't exist yet (for creating new configs).
+    Uses grafanactl-compatible format at:
+    1. $XDG_CONFIG_HOME/grafanactl/config.yaml
+    2. $HOME/.config/grafanactl/config.yaml
+    3. $XDG_CONFIG_DIRS/grafanactl/config.yaml (first existing)
 
     Returns:
-        str: The grafanactl context name (e.g., 'myproject-1')
+        Path to config file (may not exist yet)
+    """
+    # Check XDG_CONFIG_HOME first
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        config_path = Path(xdg_config_home) / "grafanactl" / "config.yaml"
+        if config_path.exists():
+            return config_path
+
+    # Check ~/.config
+    home = os.environ.get("HOME")
+    if home:
+        config_path = Path(home) / ".config" / "grafanactl" / "config.yaml"
+        if config_path.exists() or not xdg_config_home:
+            return config_path
+
+    # Check XDG_CONFIG_DIRS
+    xdg_config_dirs = os.environ.get("XDG_CONFIG_DIRS")
+    if xdg_config_dirs:
+        for config_dir in xdg_config_dirs.split(":"):
+            config_path = Path(config_dir) / "grafanactl" / "config.yaml"
+            if config_path.exists():
+                return config_path
+
+    # Default to ~/.config if nothing found
+    if home:
+        return Path(home) / ".config" / "grafanactl" / "config.yaml"
+
+    print("Error: Could not determine config file location")
+    sys.exit(1)
+
+
+def get_grafana_context() -> str:
+    """
+    Get or prompt for the context name.
+
+    Returns:
+        str: The context name (e.g., 'myproject-1')
     """
     context = os.environ.get("GRAFANA_CONTEXT")
     if not context:
-        context = input("Enter the grafanactl context name: ").strip()
+        context = input("Enter the context name: ").strip()
         if not context:
             print("GRAFANA_CONTEXT is not set, exiting")
             sys.exit(1)
@@ -27,13 +70,12 @@ def get_grafana_context() -> str:
     print(f"Using context: {context}")
     return context
 
-
 def get_grafana_config(context_name: str) -> dict[str, str]:
     """
-    Get Grafana configuration from grafanactl config file.
+    Get Grafana configuration from config file.
 
     Args:
-        context_name: grafanactl context name (e.g., 'myproject-1')
+        context_name: Context name (e.g., 'myproject-1')
 
     Returns:
         Dict with 'server', 'user', 'password', and 'org-id' keys
@@ -41,44 +83,12 @@ def get_grafana_config(context_name: str) -> dict[str, str]:
     Raises:
         SystemExit: If config file not found or context doesn't exist
     """
-    # Find grafanactl config file in order of precedence:
-    # 1. $XDG_CONFIG_HOME/grafanactl/config.yaml
-    # 2. $HOME/.config/grafanactl/config.yaml
-    # 3. $XDG_CONFIG_DIRS/grafanactl/config.yaml
-    config_path = None
+    config_path = get_config_path()
 
-    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
-    if xdg_config_home:
-        candidate = Path(xdg_config_home) / "grafanactl" / "config.yaml"
-        if candidate.exists():
-            config_path = candidate
-
-    if not config_path:
-        home = os.environ.get("HOME")
-        if home:
-            candidate = Path(home) / ".config" / "grafanactl" / "config.yaml"
-            if candidate.exists():
-                config_path = candidate
-
-    if not config_path:
-        xdg_config_dirs = os.environ.get("XDG_CONFIG_DIRS")
-        if xdg_config_dirs:
-            for config_dir in xdg_config_dirs.split(":"):
-                candidate = Path(config_dir) / "grafanactl" / "config.yaml"
-                if candidate.exists():
-                    config_path = candidate
-                    break
-
-    if not config_path or not config_path.exists():
+    if not config_path.exists():
         print("Error: grafanactl config file not found")
-        print("Searched locations:")
-        if xdg_config_home:
-            print(f"  - $XDG_CONFIG_HOME/grafanactl/config.yaml ({xdg_config_home}/grafanactl/config.yaml)")
-        if home:
-            print(f"  - $HOME/.config/grafanactl/config.yaml ({home}/.config/grafanactl/config.yaml)")
-        if xdg_config_dirs:
-            for config_dir in xdg_config_dirs.split(":"):
-                print(f"  - {config_dir}/grafanactl/config.yaml")
+        print(f"Expected location: {config_path}")
+        print(f"\nCreate one with: config set contexts.{context_name}.grafana.server <url>")
         sys.exit(1)
 
     # Read the config file

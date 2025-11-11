@@ -51,7 +51,7 @@ GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . download-das
 
 Or if installed:
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards download-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uv run download-dashboards
 ```
 
 This script:
