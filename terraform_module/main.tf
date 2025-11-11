@@ -56,7 +56,7 @@ resource "null_resource" "upload_dashboards" {
   depends_on = [local_file.grafanactl_config]
 
   provisioner "local-exec" {
-    command = "uvx --from git+https://github.com/rhiza-research/grafana-weaver upload-dashboards"
+    command = "uvx --refresh grafana-weaver upload"
     environment = {
       GRAFANA_CONTEXT = local.context_name
       DASHBOARD_DIR   = var.dashboards_base_path
