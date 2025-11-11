@@ -1,6 +1,6 @@
 [project]
 name = "grafana-weaver"
-version = "0.1.2"
+dynamic = ["version"]
 description = "A system for managing Grafana dashboards as code using Jsonnet"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,8 +42,11 @@ dev = [
 grafana-weaver = "grafana_weaver.main:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/grafana_weaver"]

@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+from importlib.metadata import version
 from pathlib import Path
 
 from grafana_weaver.core.client import GrafanaClient
@@ -14,6 +15,12 @@ from grafana_weaver.core.config_manager import GrafanaConfigManager
 from grafana_weaver.core.dashboard_downloader import DashboardDownloader
 from grafana_weaver.core.dashboard_extractor import DashboardExtractor
 from grafana_weaver.core.jsonnet_builder import JsonnetBuilder
+
+# Read version from package metadata (defined in pyproject.toml)
+try:
+    __version__ = version("grafana-weaver")
+except Exception:
+    __version__ = "unknown"
 
 
 # ============================================================================
@@ -324,6 +331,11 @@ def main():
     parser = argparse.ArgumentParser(
         prog="grafana-weaver",
         description="Manage Grafana dashboards with Jsonnet templates",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
