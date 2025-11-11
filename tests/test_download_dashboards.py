@@ -1,206 +1,145 @@
-"""Tests for download_dashboards.py module."""
+"""Tests for download_dashboards command."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import pytest
-
-from grafana_weaver.download_dashboards import (
-    download_dashboards_from_grafana,
-    main,
-    process_dashboards,
-)
+from grafana_weaver.main import download_dashboards
+from grafana_weaver.core.client import GrafanaClient
+from grafana_weaver.core.dashboard_downloader import DashboardDownloader
 
 
-class TestDownloadDashboardsFromGrafana:
-    """Tests for download_dashboards_from_grafana function."""
+class TestDashboardDownloader:
+    """Tests for DashboardDownloader class."""
 
-    @patch("grafana_weaver.download_dashboards.requests.get")
-    @patch("grafana_weaver.download_dashboards.get_grafana_config")
-    def test_successful_download(self, mock_get_config, mock_requests_get, tmp_path):
+    def test_successful_download(self, tmp_path):
         """Successful download should download all dashboards."""
-        # Mock config
-        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
+        client = GrafanaClient("https://grafana.example.com", "admin", "secret")
 
-        # Mock search API response
-        search_response = Mock()
-        search_response.status_code = 200
-        search_response.json.return_value = [
-            {"uid": "dash1", "title": "Dashboard 1", "folderTitle": ""},
-            {"uid": "dash2", "title": "Dashboard 2", "folderTitle": "MyFolder"},
-        ]
+        with patch.object(client, "list_dashboards") as mock_list:
+            with patch.object(client, "get_dashboard") as mock_get:
+                # Mock list response
+                mock_list.return_value = [
+                    {"uid": "dash1", "title": "Dashboard 1", "folderTitle": ""},
+                    {"uid": "dash2", "title": "Dashboard 2", "folderTitle": "MyFolder"},
+                ]
 
-        # Mock dashboard API responses
-        dash1_response = Mock()
-        dash1_response.status_code = 200
-        dash1_response.json.return_value = {
-            "dashboard": {"title": "Dashboard 1", "panels": []},
-            "meta": {"folderTitle": ""},
-        }
+                # Mock dashboard responses
+                def get_dashboard_side_effect(uid):
+                    if uid == "dash1":
+                        return {
+                            "dashboard": {"title": "Dashboard 1", "panels": []},
+                            "meta": {"folderTitle": ""},
+                        }
+                    else:
+                        return {
+                            "dashboard": {"title": "Dashboard 2", "panels": []},
+                            "meta": {"folderTitle": "MyFolder"},
+                        }
 
-        dash2_response = Mock()
-        dash2_response.status_code = 200
-        dash2_response.json.return_value = {
-            "dashboard": {"title": "Dashboard 2", "panels": []},
-            "meta": {"folderTitle": "MyFolder"},
-        }
+                mock_get.side_effect = get_dashboard_side_effect
 
-        mock_requests_get.side_effect = [search_response, dash1_response, dash2_response]
+                downloader = DashboardDownloader(client)
+                downloaded_files = downloader.download_all(tmp_path)
 
-        download_dashboards_from_grafana(tmp_path, "test-context")
+                # Verify dashboards were downloaded
+                assert (tmp_path / "dashboard-1.json").exists()
+                assert (tmp_path / "myfolder" / "dashboard-2.json").exists()
+                assert len(downloaded_files) == 2
 
-        # Verify dashboards were downloaded
-        assert (tmp_path / "dashboard-1.json").exists()
-        assert (tmp_path / "myfolder" / "dashboard-2.json").exists()
+    def test_download_api_error(self, tmp_path):
+        """API error should be handled gracefully."""
+        client = GrafanaClient("https://grafana.example.com", "admin", "secret")
 
-    @patch("grafana_weaver.download_dashboards.requests.get")
-    @patch("grafana_weaver.download_dashboards.get_grafana_config")
-    def test_download_api_error(self, mock_get_config, mock_requests_get, tmp_path):
-        """API error should exit with error code."""
-        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
+        with patch.object(client, "list_dashboards") as mock_list:
+            with patch.object(client, "get_dashboard") as mock_get:
+                mock_list.return_value = [{"uid": "dash1", "title": "Dashboard 1", "folderTitle": ""}]
 
-        # Mock failed API response
-        search_response = Mock()
-        search_response.status_code = 401
-        search_response.text = "Unauthorized"
-        mock_requests_get.return_value = search_response
+                # Mock failed dashboard fetch
+                mock_get.side_effect = Exception("API Error")
 
-        with pytest.raises(SystemExit) as exc_info:
-            download_dashboards_from_grafana(tmp_path, "test-context")
-        assert exc_info.value.code == 1
+                downloader = DashboardDownloader(client)
+                downloaded_files = downloader.download_all(tmp_path)
 
-    @patch("grafana_weaver.download_dashboards.requests.get")
-    @patch("grafana_weaver.download_dashboards.get_grafana_config")
-    def test_skip_general_folder(self, mock_get_config, mock_requests_get, tmp_path):
+                # Should continue despite error
+                # Dashboard should not be created
+                assert not (tmp_path / "dashboard-1.json").exists()
+                assert len(downloaded_files) == 0
+
+    def test_skip_general_folder(self, tmp_path):
         """Dashboards in General folder should not be in subfolder."""
-        mock_get_config.return_value = {"server": "https://grafana.example.com", "user": "admin", "password": "secret"}
+        client = GrafanaClient("https://grafana.example.com", "admin", "secret")
 
-        search_response = Mock()
-        search_response.status_code = 200
-        search_response.json.return_value = [
-            {"uid": "dash1", "title": "Dashboard", "folderTitle": "General"},
-        ]
+        with patch.object(client, "list_dashboards") as mock_list:
+            with patch.object(client, "get_dashboard") as mock_get:
+                mock_list.return_value = [{"uid": "dash1", "title": "Dashboard", "folderTitle": "General"}]
 
-        dash_response = Mock()
-        dash_response.status_code = 200
-        dash_response.json.return_value = {
-            "dashboard": {"title": "Dashboard", "panels": []},
-            "meta": {"folderTitle": "General"},
+                mock_get.return_value = {
+                    "dashboard": {"title": "Dashboard", "panels": []},
+                    "meta": {"folderTitle": "General"},
+                }
+
+                downloader = DashboardDownloader(client)
+                downloader.download_all(tmp_path)
+
+                # Dashboard should be in root, not in general/ subfolder
+                assert (tmp_path / "dashboard.json").exists()
+                assert not (tmp_path / "general").exists()
+
+    def test_sanitize_name(self):
+        """Sanitize name should handle special characters."""
+        assert DashboardDownloader._sanitize_name("My Dashboard") == "my-dashboard"
+        assert DashboardDownloader._sanitize_name("Test/Folder") == "test-folder"
+        assert DashboardDownloader._sanitize_name("Mixed Case Test") == "mixed-case-test"
+
+
+class TestRun:
+    """Tests for CLI run function."""
+
+    @patch("grafana_weaver.main.DashboardExtractor")
+    @patch("grafana_weaver.main.DashboardDownloader")
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    @patch("grafana_weaver.main.tempfile.mkdtemp")
+    def test_main_success(self, mock_mkdtemp, mock_config_mgr, mock_client, mock_downloader, mock_extractor, tmp_path):
+        """Main should orchestrate download and extraction."""
+        dashboards_dir = tmp_path / "dashboards"
+        dashboards_dir.mkdir()
+
+        # Mock config manager
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
         }
+        mock_config_mgr.return_value = mock_manager
 
-        mock_requests_get.side_effect = [search_response, dash_response]
+        # Mock temp directory
+        temp_dir = tmp_path / "temp"
+        temp_dir.mkdir()
+        mock_mkdtemp.return_value = str(temp_dir)
 
-        download_dashboards_from_grafana(tmp_path, "test-context")
+        # Mock client
+        mock_client_instance = Mock()
+        mock_client.return_value = mock_client_instance
 
-        # Dashboard should be in root, not in general/ subfolder
-        assert (tmp_path / "dashboard.json").exists()
-        assert not (tmp_path / "general").exists()
+        # Mock downloader
+        mock_downloader_instance = Mock()
+        mock_downloader_instance.download_all.return_value = []
+        mock_downloader.return_value = mock_downloader_instance
 
+        # Mock extractor
+        mock_extractor_instance = Mock()
+        mock_extractor.return_value = mock_extractor_instance
 
-class TestProcessDashboards:
-    """Tests for process_dashboards function."""
-
-    @patch("grafana_weaver.download_dashboards.process_json_file")
-    def test_process_single_dashboard(self, mock_process_json, tmp_path):
-        """Single dashboard should be processed correctly."""
-        downloaded_dir = tmp_path / "downloaded"
-        downloaded_dir.mkdir()
-        output_dir = tmp_path / "output"
-
-        # Create a test dashboard file
-        dashboard_file = downloaded_dir / "test-dashboard.json"
-        dashboard_file.write_text('{"title": "Test Dashboard"}')
-
-        # Mock successful processing
-        mock_process_json.return_value = True
-
-        process_dashboards(downloaded_dir, output_dir)
-
-        # Verify process_json_file was called with correct arguments
-        assert mock_process_json.called
-        call_args = mock_process_json.call_args
-        assert call_args[1]["base_dir"] == str(downloaded_dir)
-        assert call_args[1]["output_dir"] == str(output_dir)
-
-    @patch("grafana_weaver.download_dashboards.process_json_file")
-    def test_process_nested_dashboards(self, mock_process_json, tmp_path):
-        """Nested dashboards should be processed with correct base-dir."""
-        downloaded_dir = tmp_path / "downloaded"
-        downloaded_dir.mkdir()
-        nested_dir = downloaded_dir / "subfolder"
-        nested_dir.mkdir()
-        output_dir = tmp_path / "output"
-
-        # Create nested dashboard
-        dashboard_file = nested_dir / "nested-dashboard.json"
-        dashboard_file.write_text('{"title": "Nested Dashboard"}')
-
-        # Mock successful processing
-        mock_process_json.return_value = True
-
-        process_dashboards(downloaded_dir, output_dir)
-
-        # Verify base-dir points to downloaded_dir (not nested folder)
-        assert mock_process_json.called
-        call_args = mock_process_json.call_args
-        assert call_args[1]["base_dir"] == str(downloaded_dir)
-
-    @patch("grafana_weaver.download_dashboards.process_json_file")
-    def test_process_extraction_error(self, mock_process_json, tmp_path):
-        """Extraction error should exit with error code."""
-        downloaded_dir = tmp_path / "downloaded"
-        downloaded_dir.mkdir()
-        output_dir = tmp_path / "output"
-
-        dashboard_file = downloaded_dir / "test.json"
-        dashboard_file.write_text("{}")
-
-        # Mock failed extraction
-        mock_process_json.return_value = False
-
-        with pytest.raises(SystemExit) as exc_info:
-            process_dashboards(downloaded_dir, output_dir)
-        assert exc_info.value.code == 1
-
-    def test_no_dashboards_found(self, tmp_path, capsys):
-        """Empty directory should complete without error."""
-        downloaded_dir = tmp_path / "downloaded"
-        downloaded_dir.mkdir()
-        output_dir = tmp_path / "output"
-
-        process_dashboards(downloaded_dir, output_dir)
-
-        captured = capsys.readouterr()
-        assert "No JSON files found" in captured.out
-
-
-class TestMain:
-    """Tests for main function."""
-
-    @patch("grafana_weaver.download_dashboards.process_dashboards")
-    @patch("grafana_weaver.download_dashboards.download_dashboards_from_grafana")
-    @patch("grafana_weaver.download_dashboards.get_grafana_context")
-    def test_main_success(self, mock_get_grafana_context, mock_download, mock_process, tmp_path, monkeypatch):
-        """Main should orchestrate download and processing."""
-        mock_get_grafana_context.return_value = "test-context"
-        monkeypatch.chdir(tmp_path)
-
-        main()
+        args = SimpleNamespace(
+            dashboard_dir=dashboards_dir,
+            grafana_context="test-context"
+        )
+        download_dashboards(args)
 
         # Verify workflow was called
-        mock_get_grafana_context.assert_called_once()
-        mock_download.assert_called_once()
-        mock_process.assert_called_once()
-
-    @patch("grafana_weaver.download_dashboards.download_dashboards_from_grafana")
-    @patch("grafana_weaver.download_dashboards.get_grafana_context")
-    def test_main_uses_dashboard_dir_env(self, mock_get_grafana_context, mock_download, tmp_path, monkeypatch):
-        """Main should use DASHBOARD_DIR environment variable."""
-        mock_get_grafana_context.return_value = "test-context"
-        dashboard_dir = tmp_path / "custom-dashboards"
-        monkeypatch.setenv("DASHBOARD_DIR", str(dashboard_dir))
-
-        with patch("grafana_weaver.download_dashboards.process_dashboards"):
-            main()
-
-        # The processing should be called (which means it got past directory setup)
-        assert mock_download.called
+        mock_config_mgr.assert_called_once_with(context="test-context")
+        mock_manager.get_context.assert_called_once_with()
+        mock_downloader_instance.download_all.assert_called_once()

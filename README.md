@@ -18,18 +18,18 @@ Grafana-Weaver is a pure Python project that can be run directly using `uvx` wit
 
 ```bash
 # Download dashboards from Grafana
-uvx --from git+https://github.com/rhiza-research/grafana-weaver download-dashboards
+uvx --from git+https://github.com/rhiza-research/grafana-weaver grafana-weaver download
 
 # Upload dashboards to Grafana
-uvx --from git+https://github.com/rhiza-research/grafana-weaver upload-dashboards
+uvx --from git+https://github.com/rhiza-research/grafana-weaver grafana-weaver upload
 ```
 
 Or if you have the repository locally:
 
 ```bash
 # From the repository root
-uvx --from . download-dashboards
-uvx --from . upload-dashboards
+uvx --from . grafana-weaver download
+uvx --from . grafana-weaver upload
 ```
 
 Alternatively, you can install it with uv:
@@ -46,12 +46,12 @@ uv pip install .
 
 Using uvx (no installation required):
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . download-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . grafana-weaver download
 ```
 
 Or if installed:
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uv run download-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards grafana-weaver download
 ```
 
 This script:
@@ -64,12 +64,12 @@ This script:
 
 Using uvx (no installation required):
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . upload-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . grafana-weaver upload
 ```
 
 Or if installed:
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards upload-dashboards
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards grafana-weaver upload
 ```
 
 This script:
@@ -148,9 +148,14 @@ grafana-weaver/
 ├── src/
 │   └── grafana_weaver/
 │       ├── __init__.py
-│       ├── download_dashboards.py  # Download from Grafana
-│       ├── upload_dashboards.py    # Upload to Grafana
-│       └── extract_external_content.py  # Extract EXTERNAL content
+│       ├── main.py             # Unified CLI entry point
+│       └── core/               # Core library classes
+│           ├── __init__.py
+│           ├── client.py               # Grafana API client
+│           ├── config_manager.py       # Config file management
+│           ├── jsonnet_builder.py      # Jsonnet compilation
+│           ├── dashboard_downloader.py # Download dashboards from Grafana
+│           └── dashboard_extractor.py  # EXTERNAL content extraction
 └── terraform_module/           # Terraform module for Grafana
 
 ../dashboards/
@@ -174,8 +179,15 @@ Grafana-Weaver uses a config file in the [grafanactl](https://github.com/grafana
 
 ### Environment Variables
 
+**Dashboard Commands** (`upload`, `download`):
 - `GRAFANA_CONTEXT` - The grafanactl context name (e.g., `myproject-1`)
 - `DASHBOARD_DIR` - Path to the dashboards directory (defaults to `./dashboards`)
+
+**Config Add Command** (`config add`):
+- `GRAFANA_SERVER` - Grafana server URL (e.g., `https://grafana.example.com`)
+- `GRAFANA_USER` - Grafana username (defaults to `admin`)
+- `GRAFANA_PASSWORD` - Grafana password
+- `GRAFANA_ORG_ID` - Grafana organization ID (defaults to `1`)
 
 ### Config File
 
@@ -196,7 +208,94 @@ contexts:
 current-context: myproject-1
 ```
 
-The `GRAFANA_CONTEXT` environment variable should match a context name in your config file.
+### Context Resolution
+
+The tool resolves which Grafana context to use in the following priority order:
+
+1. **GRAFANA_CONTEXT environment variable** - If set, uses this context name
+2. **current-context in config file** - Falls back to the `current-context` field in the config
+3. **Error** - If neither is available, the tool will exit with an error
+
+This allows flexibility - you can either set the context per-command via environment variable, or configure a default context in your config file.
+
+### Managing Config with CLI
+
+Grafana-Weaver includes a `config` command to manage your configuration file:
+
+**Add a context:**
+```bash
+# Using CLI parameters
+grafana-weaver config add myproject-1 \
+  --server https://grafana.example.com \
+  --user admin \
+  --password secret123 \
+  --org-id 1 \
+  --use-context  # Optionally set as current-context
+
+# Or using environment variables
+export GRAFANA_SERVER=https://grafana.example.com
+export GRAFANA_USER=admin
+export GRAFANA_PASSWORD=secret123
+export GRAFANA_ORG_ID=1
+grafana-weaver config add myproject-1 --use-context
+```
+
+**List all contexts:**
+```bash
+grafana-weaver config list
+```
+
+**Switch to a context:**
+```bash
+grafana-weaver config use myproject-1
+```
+
+**Show context details:**
+```bash
+grafana-weaver config show myproject-1  # Show specific context
+grafana-weaver config show              # Show current context
+```
+
+**Delete a context:**
+```bash
+grafana-weaver config delete myproject-1
+```
+
+**Set individual config values:**
+```bash
+grafana-weaver config set contexts.myproject-1.grafana.server https://new-server.com
+```
+
+**Check config file location:**
+```bash
+grafana-weaver config check
+```
+
+### Using CLI Parameters vs Environment Variables
+
+All commands support both CLI parameters and environment variables. CLI parameters override environment variables:
+
+**Using environment variables:**
+```bash
+export GRAFANA_CONTEXT=myproject-1
+export DASHBOARD_DIR=./my-dashboards
+grafana-weaver upload
+```
+
+**Using CLI parameters:**
+```bash
+grafana-weaver upload --grafana-context myproject-1 --dashboard-dir ./my-dashboards
+```
+
+**Mix and match (CLI params override env vars):**
+```bash
+export DASHBOARD_DIR=./dashboards
+grafana-weaver upload --grafana-context myproject-1  # Uses env var for dir, param for context
+```
+
+**Available parameters:**
+- `--grafana-context` - Which Grafana context to use (overrides `GRAFANA_CONTEXT`)
+- `--dashboard-dir` - Path to dashboards directory (overrides `DASHBOARD_DIR`, defaults to `./dashboards`)
 
 ### Terraform Integration
 
@@ -320,6 +419,8 @@ tests/
 │   ├── sample_dashboard.json
 │   ├── sample_dashboard_with_params.json
 │   └── sample_dashboard_concat.json
+├── test_cli_config.py                   # Tests for config CLI
+├── test_config_manager.py               # Tests for GrafanaConfigManager
 ├── test_extract_external_content.py     # Tests for extraction logic
 ├── test_upload_dashboards.py            # Tests for upload workflow
 ├── test_download_dashboards.py          # Tests for download workflow

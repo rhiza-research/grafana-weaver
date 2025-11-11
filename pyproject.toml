@@ -41,10 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-upload-dashboards = "grafana_weaver.upload_dashboards:main"
-download-dashboards = "grafana_weaver.download_dashboards:main"
-extract-external-content = "grafana_weaver.extract_external_content:main"
-config = "grafana_weaver.config:main"
+grafana-weaver = "grafana_weaver.main:main"
 
 [build-system]
 requires = ["hatchling"]
