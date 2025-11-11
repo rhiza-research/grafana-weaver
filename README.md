@@ -1,5 +1,8 @@
 # Grafana-Weaver
 
+[![Tests](https://github.com/rhiza-research/grafana-weaver/actions/workflows/test.yml/badge.svg)](https://github.com/rhiza-research/grafana-weaver/actions/workflows/test.yml)
+
+
 A system for managing Grafana dashboards as code using Jsonnet, with support for extracting large content blocks (SQL queries, JavaScript, etc.) into separate asset files.
 
 ## Overview
