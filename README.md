@@ -14,44 +14,31 @@ This system allows you to:
 
 ## Installation
 
-Grafana-Weaver is a pure Python project that can be run directly using `uvx` without installation:
+**No installation required** - Run directly with `uvx`:
 
 ```bash
-# Download dashboards from Grafana
-uvx --from git+https://github.com/rhiza-research/grafana-weaver grafana-weaver download
-
-# Upload dashboards to Grafana
-uvx --from git+https://github.com/rhiza-research/grafana-weaver grafana-weaver upload
+uvx grafana-weaver --help
 ```
 
-Or if you have the repository locally:
+Or install it:
 
 ```bash
-# From the repository root
-uvx --from . grafana-weaver download
-uvx --from . grafana-weaver upload
-```
+# With pip
+pip install grafana-weaver
 
-Alternatively, you can install it with uv:
+# With uv
+uv pip install grafana-weaver
 
-```bash
-uv pip install git+https://github.com/rhiza-research/grafana-weaver
-# Or from local directory
-uv pip install .
+# With pipx (for global CLI tools)
+pipx install grafana-weaver
 ```
 
 ## Workflow
 
 ### Download Dashboards from Grafana
 
-Using uvx (no installation required):
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . grafana-weaver download
-```
-
-Or if installed:
-```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards grafana-weaver download
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver download
 ```
 
 This script:
@@ -62,14 +49,8 @@ This script:
 
 ### Upload Dashboards to Grafana
 
-Using uvx (no installation required):
 ```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx --from . grafana-weaver upload
-```
-
-Or if installed:
-```bash
-GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards grafana-weaver upload
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver upload
 ```
 
 This script:
@@ -363,7 +344,7 @@ This makes dashboard development natural while keeping large content blocks main
 
 ## Requirements
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - [uv](https://docs.astral.sh/uv/) (for running with uvx)
 - A config file (in grafanactl format) with your Grafana credentials
 
