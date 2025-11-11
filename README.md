@@ -261,7 +261,7 @@ This makes dashboard development natural while keeping large content blocks main
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - [uv](https://docs.astral.sh/uv/) (for running with uvx)
 - A config file (in grafanactl format) with your Grafana credentials
 
