@@ -1,9 +1,9 @@
 [project]
 name = "grafana-weaver"
-version = "0.1.0"
+version = "0.1.1"
 description = "A system for managing Grafana dashboards as code using Jsonnet"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Rhiza Research", email = "info@rhizaresearch.org"}
@@ -14,8 +14,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
