@@ -465,6 +465,7 @@ class DashboardExtractor:
         if not self._modifications:
             with open(output_path, "w") as f:
                 f.write(json_content)
+                f.write('\n')
             return
 
         # Deduplicate imports
@@ -493,3 +494,4 @@ class DashboardExtractor:
             if local_vars:
                 f.write("\n".join(local_vars) + "\n\n")
             f.write(json_content)
+            f.write('\n')
