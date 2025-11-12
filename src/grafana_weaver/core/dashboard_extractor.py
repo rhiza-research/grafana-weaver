@@ -94,6 +94,11 @@ class DashboardExtractor:
             print(f"Removing root 'id' field: {data['id']}")
             del data["id"]
 
+        # Set the root version field to '1'
+        if "version" in data:
+            print("Standardizing version field to 1")
+            data["version"] = 1
+
         # Write jsonnet template
         template_path = template_dir / f"{json_file.stem}.jsonnet"
         self._write_jsonnet_template(data, template_path)
