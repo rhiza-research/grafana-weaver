@@ -460,7 +460,7 @@ class DashboardExtractor:
             data: Modified dashboard JSON with placeholders
             output_path: Path to write jsonnet file to
         """
-        json_content = json.dumps(data, indent=2)
+        json_content = json.dumps(data, indent=2, ensure_ascii=False)
 
         if not self._modifications:
             with open(output_path, "w") as f:
