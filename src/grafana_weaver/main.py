@@ -204,13 +204,40 @@ def upload_dashboards(args):
     success_count = 0
     error_count = 0
 
+    # Cache for folder title -> folder UID mapping
+    folder_cache = {}
+
     for json_file in json_files:
         # Read the dashboard JSON
         with open(json_file) as f:
             dashboard_json = json.load(f)
 
+        # Extract folder from file path
+        # File structure: dashboard_dir/build/[folder/]dashboard.json
+        build_dir = args.dashboard_dir / "build"
+        relative_path = json_file.relative_to(build_dir)
+
+        folder_uid = None
+        if len(relative_path.parts) > 1:
+            # Dashboard is in a subfolder
+            folder_name = relative_path.parts[0]
+
+            # Get or create the folder, using cache to avoid repeated API calls
+            if folder_name not in folder_cache:
+                try:
+                    # Convert folder name back to title format (reverse sanitization)
+                    folder_title = folder_name.replace("-", " ").title()
+                    folder = client.get_or_create_folder(folder_title)
+                    folder_cache[folder_name] = folder["uid"]
+                    print(f"  Using folder: {folder_title}")
+                except Exception as e:
+                    print(f"  Warning: Failed to get/create folder '{folder_name}': {e}")
+                    folder_cache[folder_name] = None
+
+            folder_uid = folder_cache[folder_name]
+
         try:
-            client.upload_dashboard(dashboard_json)
+            client.upload_dashboard(dashboard_json, folder_uid=folder_uid)
             print(f"  ✓ Uploaded: {dashboard_json.get('title', json_file.name)}")
             success_count += 1
         except Exception as e:
