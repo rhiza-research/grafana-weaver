@@ -4,7 +4,7 @@ terraform {
 
 # Variables for the grafanactl context
 locals {
-  context_name = "${var.repo_name}-${var.pr_number}"
+  context_name = var.pr_number != "" ? "${var.repo_name}-${var.pr_number}" : var.repo_name
   config_file_path = pathexpand("~/.config/grafanactl/config.yaml")
 }
 
