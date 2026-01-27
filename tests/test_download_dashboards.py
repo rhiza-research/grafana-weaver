@@ -3,9 +3,9 @@
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from grafana_weaver.main import download_dashboards
 from grafana_weaver.core.client import GrafanaClient
 from grafana_weaver.core.dashboard_downloader import DashboardDownloader
+from grafana_weaver.main import download_dashboards
 
 
 class TestDashboardDownloader:
@@ -135,7 +135,7 @@ class TestRun:
 
         args = SimpleNamespace(
             dashboard_dir=dashboards_dir,
-            grafana_context="test-context"
+            grafana_context="test-context",
         )
         download_dashboards(args)
 

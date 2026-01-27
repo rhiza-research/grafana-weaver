@@ -1,14 +1,13 @@
 """Tests for extract_external_content command."""
 
 import json
-from unittest.mock import patch, Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 
-from types import SimpleNamespace
-
-from grafana_weaver.main import extract_external_content
 from grafana_weaver.core.dashboard_extractor import DashboardExtractor
+from grafana_weaver.main import extract_external_content
 
 
 class TestDashboardExtractor:
@@ -275,7 +274,7 @@ class TestMain:
         args = SimpleNamespace(
             json_file=test_file,
             dashboard_dir=tmp_path / "dashboards",
-            base_dir=None
+            base_dir=None,
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -303,7 +302,7 @@ class TestMain:
         args = SimpleNamespace(
             json_file=test_file,
             dashboard_dir=tmp_path / "dashboards",
-            base_dir=None
+            base_dir=None,
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -323,7 +322,7 @@ class TestMain:
         args = SimpleNamespace(
             json_file=test_file,
             dashboard_dir=custom_dir,
-            base_dir=None
+            base_dir=None,
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -349,7 +348,7 @@ class TestMain:
         args = SimpleNamespace(
             json_file=test_file,
             dashboard_dir=tmp_path / "output",
-            base_dir=base_dir
+            base_dir=base_dir,
         )
 
         with pytest.raises(SystemExit):

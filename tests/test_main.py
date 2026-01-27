@@ -1,7 +1,8 @@
 """Tests for main CLI entrypoint."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch
 
 from grafana_weaver.main import main
 
@@ -69,12 +70,21 @@ class TestMainCLI:
     @patch("grafana_weaver.main.config_add")
     def test_config_add_command(self, mock_handle):
         """Should call config.handle_command() for config subcommands."""
-        with patch("sys.argv", [
-            "grafana-weaver", "config", "add", "test-ctx",
-            "--server", "https://grafana.test",
-            "--user", "admin",
-            "--password", "secret"
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "grafana-weaver",
+                "config",
+                "add",
+                "test-ctx",
+                "--server",
+                "https://grafana.test",
+                "--user",
+                "admin",
+                "--password",
+                "secret",
+            ],
+        ):
             main()
 
         mock_handle.assert_called_once()
