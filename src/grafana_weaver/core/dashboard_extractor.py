@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -465,7 +466,7 @@ class DashboardExtractor:
         if not self._modifications:
             with open(output_path, "w") as f:
                 f.write(json_content)
-                f.write('\n')
+                f.write("\n")
             return
 
         # Deduplicate imports
@@ -477,8 +478,11 @@ class DashboardExtractor:
                 unique_imports[filename] = var_name
 
         # Generate local variables
+        assets_rel = os.path.relpath(self.assets_dir, output_path.parent).replace("\\", "/")
+        if not assets_rel.startswith("."):
+            assets_rel = f"./{assets_rel}"
         local_vars = [
-            f"local {var_name} = importstr './assets/{filename}';"
+            f"local {var_name} = importstr '{assets_rel}/{filename}';"
             for filename, var_name in sorted(unique_imports.items())
         ]
 
@@ -494,4 +498,4 @@ class DashboardExtractor:
             if local_vars:
                 f.write("\n".join(local_vars) + "\n\n")
             f.write(json_content)
-            f.write('\n')
+            f.write("\n")
