@@ -30,14 +30,6 @@ Homepage = "https://github.com/rhiza-research/grafana-weaver"
 Repository = "https://github.com/rhiza-research/grafana-weaver"
 Issues = "https://github.com/rhiza-research/grafana-weaver/issues"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
-    "ruff>=0.1.0",
-]
-
 [project.scripts]
 grafana-weaver = "grafana_weaver.main:main"
 
@@ -51,8 +43,8 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/grafana_weaver"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
