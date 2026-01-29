@@ -121,7 +121,11 @@ class GrafanaClient:
         return self.create_folder(title)
 
     def upload_dashboard(
-        self, dashboard_json: dict, folder_uid: str | None = None, overwrite: bool = True, message: str = None
+        self,
+        dashboard_json: dict,
+        folder_uid: str | None = None,
+        overwrite: bool = True,
+        message: str = None,
     ) -> dict:
         """
         Upload a dashboard to Grafana.

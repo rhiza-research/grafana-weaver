@@ -410,9 +410,25 @@ tests/
 
 ### Code Quality
 
-This project uses [Ruff](https://github.com/astral-sh/ruff) for both linting and formatting.
+This project uses [Ruff](https://github.com/astral-sh/ruff) for both linting and formatting, with pre-commit hooks to automatically check code on every commit.
 
-**Linting:**
+**Pre-commit hooks:**
+
+The project includes pre-commit hooks that run Ruff linting and formatting automatically. To set up:
+
+```bash
+# Install dev dependencies (includes pre-commit)
+uv sync
+
+# Install the pre-commit hooks
+pre-commit install
+```
+
+Once installed, every commit will automatically:
+- Run `ruff check --fix` to lint and auto-fix issues
+- Run `ruff format` to format code
+
+**Manual linting:**
 ```bash
 # Check for linting issues
 uv run ruff check src/ tests/
@@ -421,7 +437,7 @@ uv run ruff check src/ tests/
 uv run ruff check --fix src/ tests/
 ```
 
-**Formatting:**
+**Manual formatting:**
 ```bash
 # Format code
 uv run ruff format src/ tests/

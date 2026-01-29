@@ -5,9 +5,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from grafana_weaver.main import upload_dashboards
 from grafana_weaver.core.client import GrafanaClient
 from grafana_weaver.core.jsonnet_builder import JsonnetBuilder
+from grafana_weaver.main import upload_dashboards
 
 
 class TestJsonnetBuilder:
@@ -195,7 +195,7 @@ class TestMain:
         # Create args object
         args = SimpleNamespace(
             dashboard_dir=dashboards_dir,
-            grafana_context="test-context"
+            grafana_context="test-context",
         )
         upload_dashboards(args)
 
@@ -211,7 +211,7 @@ class TestMain:
 
         args = SimpleNamespace(
             dashboard_dir=nonexistent_dir,
-            grafana_context="test-context"
+            grafana_context="test-context",
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -249,7 +249,7 @@ class TestMain:
 
         args = SimpleNamespace(
             dashboard_dir=dashboard_dir,
-            grafana_context="test-context"
+            grafana_context="test-context",
         )
         upload_dashboards(args)
 
