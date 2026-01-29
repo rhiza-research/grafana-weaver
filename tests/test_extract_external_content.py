@@ -210,6 +210,50 @@ class TestExtractFromFile:
         asset_files = list(assets_dir.glob("*.js"))
         assert len(asset_files) > 0
 
+    @pytest.mark.parametrize(
+        ("relative_dir", "expected_import", "jsonnet_rel_path"),
+        [
+            (".", "importstr './assets/ab.js'", "dashboard.jsonnet"),
+            ("xyz", "importstr '../assets/ab.js'", "xyz/dashboard.jsonnet"),
+            ("xyz/abc", "importstr '../../assets/ab.js'", "xyz/abc/dashboard.jsonnet"),
+        ],
+    )
+    def test_import_path_by_dashboard_depth(
+        self,
+        tmp_path,
+        relative_dir,
+        expected_import,
+        jsonnet_rel_path,
+    ):
+        """Jsonnet should import assets with the correct relative path by folder depth."""
+        input_root = tmp_path / "dashboards"
+        input_dir = input_root / relative_dir
+        input_dir.mkdir(parents=True)
+        json_file = input_dir / "dashboard.json"
+
+        dashboard_json = {
+            "uid": "test",
+            "title": "Test Dashboard",
+            "panels": [
+                {
+                    "id": 1,
+                    "options": {"script": "// EXTERNAL:ab.js\nfunction foo() {}"},
+                },
+            ],
+        }
+        json_file.write_text(json.dumps(dashboard_json))
+
+        output_dir = tmp_path / "output"
+        extractor = DashboardExtractor(output_dir)
+
+        success = extractor.extract_from_file(json_file, base_dir=input_root)
+
+        assert success
+        jsonnet_file = output_dir / "src" / jsonnet_rel_path
+        assert jsonnet_file.exists()
+        content = jsonnet_file.read_text()
+        assert expected_import in content
+
     def test_extract_nonexistent_file(self, tmp_path):
         """Nonexistent file should return False."""
         output_dir = tmp_path / "output"
