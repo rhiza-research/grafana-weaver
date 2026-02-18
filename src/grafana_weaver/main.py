@@ -162,32 +162,55 @@ def config_check(args):
 
 
 # ============================================================================
-# Upload Command
+# Build Command
 # ============================================================================
 
 
-def upload_dashboards(args):
-    """Upload dashboards to Grafana."""
+def build_dashboards(args):
+    """Build Jsonnet dashboards to JSON without uploading."""
     if not args.dashboard_dir.exists():
         print(f"Error: dashboards directory not found at {args.dashboard_dir}")
         sys.exit(1)
 
     print("=" * 42)
-    print("Uploading Grafana dashboards...")
+    print("Building Grafana dashboards...")
     print("=" * 42)
     print(f"Using dashboards directory: {args.dashboard_dir}")
 
-    # Load Grafana config (context resolved from arg/env or config file)
-    config_manager = GrafanaConfigManager(context=args.grafana_context)
-    grafana_config = config_manager.get_context()
-
-    # Build all jsonnet files
     builder = JsonnetBuilder(args.dashboard_dir)
     json_files = builder.build_all()
 
     if not json_files:
-        print("No dashboards to upload")
+        print("No dashboards found to build")
         return
+
+    print(f"\nBuild complete: {len(json_files)} dashboard(s) built")
+    print(f"Output directory: {args.dashboard_dir / 'build'}")
+
+
+# ============================================================================
+# Push Command
+# ============================================================================
+
+
+def push_dashboards(args):
+    """Upload pre-built dashboards to Grafana."""
+    build_dir = args.dashboard_dir / "build"
+    if not build_dir.exists():
+        print(f"Error: build directory not found at {build_dir}")
+        print("Run 'grafana-weaver build' first")
+        sys.exit(1)
+
+    builder = JsonnetBuilder(args.dashboard_dir)
+    json_files = builder.get_built_files()
+
+    if not json_files:
+        print("No built dashboards found to push")
+        return
+
+    # Load Grafana config (context resolved from arg/env or config file)
+    config_manager = GrafanaConfigManager(context=args.grafana_context)
+    grafana_config = config_manager.get_context()
 
     # Create Grafana client
     client = GrafanaClient(
@@ -197,9 +220,10 @@ def upload_dashboards(args):
         org_id=grafana_config.get("org-id", 1),
     )
 
-    # Upload dashboards
-    print("\nUploading dashboards to Grafana...")
-    print(f"Found {len(json_files)} dashboards to upload")
+    print("=" * 42)
+    print("Pushing dashboards to Grafana...")
+    print("=" * 42)
+    print(f"Found {len(json_files)} dashboards to push")
 
     success_count = 0
     error_count = 0
@@ -214,7 +238,6 @@ def upload_dashboards(args):
 
         # Extract folder from file path
         # File structure: dashboard_dir/build/[folder/]dashboard.json
-        build_dir = args.dashboard_dir / "build"
         relative_path = json_file.relative_to(build_dir)
 
         folder_uid = None
@@ -244,14 +267,25 @@ def upload_dashboards(args):
             print(f"  ✗ Failed to upload {json_file.name}: {e}")
             error_count += 1
 
-    print(f"\nUpload complete: {success_count} succeeded, {error_count} failed")
+    print(f"\nPush complete: {success_count} succeeded, {error_count} failed")
 
     if error_count > 0:
         sys.exit(1)
 
     print("\n" + "=" * 42)
-    print("Dashboards uploaded successfully!")
+    print("Dashboards pushed successfully!")
     print("=" * 42)
+
+
+# ============================================================================
+# Upload Command
+# ============================================================================
+
+
+def upload_dashboards(args):
+    """Build and upload dashboards to Grafana."""
+    build_dashboards(args)
+    push_dashboards(args)
 
 
 # ============================================================================
@@ -430,8 +464,19 @@ def main():
     check_parser = config_subparsers.add_parser("check", help="Check config file location")
     check_parser.set_defaults(func=config_check)
 
+    # Build subcommand
+    build_parser = subparsers.add_parser("build", help="Build Jsonnet dashboards to JSON")
+    add_dashboard_dir_arg(build_parser)
+    build_parser.set_defaults(func=build_dashboards)
+
+    # Push subcommand
+    push_parser = subparsers.add_parser("push", help="Push pre-built dashboards to Grafana")
+    add_dashboard_dir_arg(push_parser)
+    add_grafana_context_arg(push_parser)
+    push_parser.set_defaults(func=push_dashboards)
+
     # Upload subcommand
-    upload_parser = subparsers.add_parser("upload", help="Upload dashboards to Grafana")
+    upload_parser = subparsers.add_parser("upload", help="Build and upload dashboards to Grafana")
     add_dashboard_dir_arg(upload_parser)
     add_grafana_context_arg(upload_parser)
     upload_parser.set_defaults(func=upload_dashboards)
