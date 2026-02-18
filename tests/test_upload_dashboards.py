@@ -7,7 +7,7 @@ import pytest
 
 from grafana_weaver.core.client import GrafanaClient
 from grafana_weaver.core.jsonnet_builder import JsonnetBuilder
-from grafana_weaver.main import upload_dashboards
+from grafana_weaver.main import build_dashboards, push_dashboards, upload_dashboards
 
 
 class TestJsonnetBuilder:
@@ -153,8 +153,263 @@ class TestGrafanaClient:
             assert result["dashboard"]["uid"] == "dash1"
 
 
+class TestBuild:
+    """Tests for build_dashboards command."""
+
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    def test_build_success(self, mock_builder, tmp_path, capsys):
+        """Build should compile jsonnet files and report results."""
+        dashboards_dir = tmp_path / "dashboards"
+        dashboards_dir.mkdir()
+
+        dashboard_file = dashboards_dir / "build" / "test.json"
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.build_all.return_value = [dashboard_file]
+        mock_builder.return_value = mock_builder_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir)
+        build_dashboards(args)
+
+        mock_builder.assert_called_once_with(dashboards_dir)
+        mock_builder_instance.build_all.assert_called_once()
+
+        captured = capsys.readouterr()
+        assert "Build complete: 1 dashboard(s) built" in captured.out
+
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    def test_build_no_dashboards(self, mock_builder, tmp_path, capsys):
+        """Build with no jsonnet files should report nothing to build."""
+        dashboards_dir = tmp_path / "dashboards"
+        dashboards_dir.mkdir()
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.build_all.return_value = []
+        mock_builder.return_value = mock_builder_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir)
+        build_dashboards(args)
+
+        captured = capsys.readouterr()
+        assert "No dashboards found to build" in captured.out
+
+    def test_build_dir_not_found(self, tmp_path):
+        """Build should exit if dashboards directory not found."""
+        args = SimpleNamespace(dashboard_dir=tmp_path / "nonexistent")
+
+        with pytest.raises(SystemExit) as exc_info:
+            build_dashboards(args)
+        assert exc_info.value.code == 1
+
+
+class TestPush:
+    """Tests for push_dashboards command."""
+
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    def test_push_success(self, mock_config_mgr, mock_builder, mock_client, tmp_path, capsys):
+        """Push should upload pre-built dashboards to Grafana."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+        dashboard_file = build_dir / "test.json"
+        dashboard_file.write_text('{"uid": "test", "title": "Test"}')
+
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
+        }
+        mock_config_mgr.return_value = mock_manager
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.get_built_files.return_value = [dashboard_file]
+        mock_builder.return_value = mock_builder_instance
+
+        mock_client_instance = Mock()
+        mock_client_instance.upload_dashboard.return_value = {"status": "success"}
+        mock_client.return_value = mock_client_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+        push_dashboards(args)
+
+        mock_builder_instance.get_built_files.assert_called_once_with(files=None)
+        mock_client_instance.upload_dashboard.assert_called_once()
+
+        captured = capsys.readouterr()
+        assert "Push complete: 1 succeeded, 0 failed" in captured.out
+
+    def test_push_no_build_dir(self, tmp_path):
+        """Push should exit if build directory does not exist."""
+        dashboards_dir = tmp_path / "dashboards"
+        dashboards_dir.mkdir()
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    def test_push_no_built_files(self, mock_builder, tmp_path, capsys):
+        """Push should report nothing to push if build dir is empty."""
+        dashboards_dir = tmp_path / "dashboards"
+        (dashboards_dir / "build").mkdir(parents=True)
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.get_built_files.return_value = []
+        mock_builder.return_value = mock_builder_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+        push_dashboards(args)
+
+        captured = capsys.readouterr()
+        assert "No built dashboards found to push" in captured.out
+
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    def test_push_with_subfolder(self, mock_config_mgr, mock_builder, mock_client, tmp_path):
+        """Push should create Grafana folders for subdirectories."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        subfolder = build_dir / "my-folder"
+        subfolder.mkdir(parents=True)
+        dashboard_file = subfolder / "test.json"
+        dashboard_file.write_text('{"uid": "test", "title": "Test"}')
+
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
+        }
+        mock_config_mgr.return_value = mock_manager
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.get_built_files.return_value = [dashboard_file]
+        mock_builder.return_value = mock_builder_instance
+
+        mock_client_instance = Mock()
+        mock_client_instance.get_or_create_folder.return_value = {"uid": "folder-uid"}
+        mock_client_instance.upload_dashboard.return_value = {"status": "success"}
+        mock_client.return_value = mock_client_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+        push_dashboards(args)
+
+        mock_client_instance.get_or_create_folder.assert_called_once_with("My Folder")
+        mock_client_instance.upload_dashboard.assert_called_once()
+        call_kwargs = mock_client_instance.upload_dashboard.call_args[1]
+        assert call_kwargs["folder_uid"] == "folder-uid"
+
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.JsonnetBuilder")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    def test_push_upload_failure_exits(self, mock_config_mgr, mock_builder, mock_client, tmp_path):
+        """Push should exit with code 1 if any upload fails."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+        dashboard_file = build_dir / "test.json"
+        dashboard_file.write_text('{"uid": "test", "title": "Test"}')
+
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
+        }
+        mock_config_mgr.return_value = mock_manager
+
+        mock_builder_instance = Mock()
+        mock_builder_instance.get_built_files.return_value = [dashboard_file]
+        mock_builder.return_value = mock_builder_instance
+
+        mock_client_instance = Mock()
+        mock_client_instance.upload_dashboard.side_effect = Exception("Server error")
+        mock_client.return_value = mock_client_instance
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    def test_push_with_files_filter(self, mock_config_mgr, mock_client, tmp_path, capsys):
+        """Push with --files should only upload specified files."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        # Create two dashboards but only pass one via --files
+        file1 = build_dir / "dash1.json"
+        file2 = build_dir / "dash2.json"
+        file1.write_text('{"uid": "dash1", "title": "Dashboard 1"}')
+        file2.write_text('{"uid": "dash2", "title": "Dashboard 2"}')
+
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
+        }
+        mock_config_mgr.return_value = mock_manager
+
+        mock_client_instance = Mock()
+        mock_client_instance.upload_dashboard.return_value = {"status": "success"}
+        mock_client.return_value = mock_client_instance
+
+        # Only push file1
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[file1])
+        push_dashboards(args)
+
+        # Should only upload one dashboard
+        mock_client_instance.upload_dashboard.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Push complete: 1 succeeded, 0 failed" in captured.out
+
+    def test_push_with_files_not_found(self, tmp_path):
+        """Push with --files should exit if a file doesn't exist."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        nonexistent = build_dir / "missing.json"
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[nonexistent])
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+    def test_push_with_files_outside_build_dir(self, tmp_path):
+        """Push with --files should exit if a file is outside build dir."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        # File exists but is outside build/
+        outside_file = tmp_path / "outside.json"
+        outside_file.write_text('{"uid": "outside"}')
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[outside_file])
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+
 class TestMain:
-    """Tests for main function."""
+    """Tests for upload (combined build+push) command."""
 
     @patch("grafana_weaver.main.GrafanaClient")
     @patch("grafana_weaver.main.JsonnetBuilder")
@@ -182,9 +437,10 @@ class TestMain:
         }
         mock_config_mgr.return_value = mock_manager
 
-        # Mock builder - return the actual file path we created
+        # Mock builder - build_all for build step, get_built_files for push step
         mock_builder_instance = Mock()
         mock_builder_instance.build_all.return_value = [dashboard_file]
+        mock_builder_instance.get_built_files.return_value = [dashboard_file]
         mock_builder.return_value = mock_builder_instance
 
         # Mock client
@@ -196,6 +452,7 @@ class TestMain:
         args = SimpleNamespace(
             dashboard_dir=dashboards_dir,
             grafana_context="test-context",
+            files=None,
         )
         upload_dashboards(args)
 
@@ -203,6 +460,7 @@ class TestMain:
         mock_config_mgr.assert_called_once_with(context="test-context")
         mock_manager.get_context.assert_called_once_with()
         mock_builder_instance.build_all.assert_called_once()
+        mock_builder_instance.get_built_files.assert_called_once_with(files=None)
         mock_client_instance.upload_dashboard.assert_called_once()
 
     def test_main_dashboards_dir_not_found(self, tmp_path):
@@ -212,33 +470,20 @@ class TestMain:
         args = SimpleNamespace(
             dashboard_dir=nonexistent_dir,
             grafana_context="test-context",
+            files=None,
         )
 
         with pytest.raises(SystemExit) as exc_info:
             upload_dashboards(args)
         assert exc_info.value.code == 1
 
-    @patch("grafana_weaver.main.GrafanaClient")
     @patch("grafana_weaver.main.JsonnetBuilder")
-    @patch("grafana_weaver.main.GrafanaConfigManager")
     def test_main_uses_dashboard_dir_env(
         self,
-        mock_config_mgr,
         mock_builder,
-        mock_client,
         tmp_path,
     ):
-        """Main should use dashboard_dir from args."""
-        # Mock config manager
-        mock_manager = Mock()
-        mock_manager.get_context.return_value = {
-            "server": "https://grafana.example.com",
-            "user": "admin",
-            "password": "secret",
-            "org-id": 1,
-        }
-        mock_config_mgr.return_value = mock_manager
-
+        """Build should use dashboard_dir from args."""
         # Mock builder
         mock_builder_instance = Mock()
         mock_builder_instance.build_all.return_value = []
@@ -249,9 +494,8 @@ class TestMain:
 
         args = SimpleNamespace(
             dashboard_dir=dashboard_dir,
-            grafana_context="test-context",
         )
-        upload_dashboards(args)
+        build_dashboards(args)
 
         # Builder should be called with the custom directory
         mock_builder.assert_called_once()

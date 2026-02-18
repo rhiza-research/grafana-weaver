@@ -10,7 +10,9 @@ A system for managing Grafana dashboards as code using Jsonnet, with support for
 This system allows you to:
 1. **Download** dashboards from Grafana and convert them to Jsonnet templates with external assets
 2. **Edit** dashboard configuration and assets as code
-3. **Upload** changes back to Grafana via the Grafana API
+3. **Build** Jsonnet templates to JSON for local validation
+4. **Push** built dashboards to Grafana via the Grafana API
+5. **Upload** build and push in a single step
 
 ## Installation
 
@@ -47,16 +49,35 @@ This script:
 3. Extracts external content (marked with `EXTERNAL`) into `./dashboards/src/assets/`
 4. Generates Jsonnet templates in `./dashboards/src/`
 
-### Upload Dashboards to Grafana
+### Build Dashboards
+
+```bash
+DASHBOARD_DIR=./dashboards uvx grafana-weaver build
+```
+
+This compiles all `.jsonnet` files from `./dashboards/src/` into JSON in `./dashboards/build/`. No Grafana credentials are needed, so this is useful for local validation and CI checks.
+
+### Push Dashboards to Grafana
+
+```bash
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver push
+```
+
+This uploads pre-built JSON dashboards from `./dashboards/build/` to Grafana. Requires Grafana credentials. Run `build` first.
+
+To push only specific files (e.g. dashboards that changed in a PR):
+
+```bash
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver push --files dashboards/build/dash1.json dashboards/build/dash2.json
+```
+
+### Upload (Build + Push)
 
 ```bash
 GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver upload
 ```
 
-This script:
-1. Reads credentials from your grafanactl config file
-2. Builds all `.jsonnet` files from `./dashboards/src/` into JSON
-3. Uploads them to Grafana via the Grafana API
+Convenience wrapper that runs `build` then `push` in a single step. Also supports `--files` to build everything but only push specific dashboards.
 
 ## External Content
 
@@ -160,9 +181,9 @@ Grafana-Weaver uses a config file in the [grafanactl](https://github.com/grafana
 
 ### Environment Variables
 
-**Dashboard Commands** (`upload`, `download`):
-- `GRAFANA_CONTEXT` - The grafanactl context name (e.g., `myproject-1`)
+**Dashboard Commands** (`build`, `push`, `upload`, `download`):
 - `DASHBOARD_DIR` - Path to the dashboards directory (defaults to `./dashboards`)
+- `GRAFANA_CONTEXT` - The grafanactl context name (e.g., `myproject-1`); required by `push`, `upload`, and `download` but not `build`
 
 **Config Add Command** (`config add`):
 - `GRAFANA_SERVER` - Grafana server URL (e.g., `https://grafana.example.com`)
@@ -331,8 +352,9 @@ The system supports full round-trip editing:
 2. Add `EXTERNAL` tags to content you want as separate files
 3. Download to get Jsonnet + assets
 4. Edit assets locally and view diffs in git
-5. Upload changes back to Grafana
-6. Repeat
+5. Build to validate changes locally
+6. Push (or upload) changes back to Grafana
+7. Repeat
 
 This makes dashboard development natural while keeping large content blocks maintainable in version control.
 
@@ -458,6 +480,24 @@ uv run ruff check --fix src/ tests/ && uv run ruff format src/ tests/
 - Trailing commas: Automatically added to multi-line collections
 
 See `[tool.ruff]` section in `pyproject.toml` for full configuration.
+
+### Local Grafana for Testing
+
+A `docker-compose.yml` is included to run a local Grafana instance for testing uploads, downloads, and the full round-trip workflow without cloud resources:
+
+```bash
+# Start Grafana (ephemeral, no persistent storage)
+docker compose up -d
+
+# Configure a local context
+uv run grafana-weaver config add local --server http://localhost:3000 --user admin --password admin
+
+# Test the workflow
+GRAFANA_CONTEXT=local uv run grafana-weaver upload
+GRAFANA_CONTEXT=local uv run grafana-weaver download
+```
+
+Grafana will be available at http://localhost:3000 with anonymous admin access enabled.
 
 ### Dependencies
 

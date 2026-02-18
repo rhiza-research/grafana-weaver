@@ -92,9 +92,13 @@ class JsonnetBuilder:
             print(f"Error parsing JSON from {jsonnet_file}: {e}")
             sys.exit(1)
 
-    def get_built_files(self) -> list[Path]:
+    def get_built_files(self, files: list[Path] | None = None) -> list[Path]:
         """
-        Get all built JSON files from build directory.
+        Get built JSON files from build directory.
+
+        Args:
+            files: If provided, filter to only these files. Paths must be
+                   under the build directory and must exist.
 
         Returns:
             List of paths to JSON files in build directory
@@ -102,4 +106,18 @@ class JsonnetBuilder:
         if not self.build_dir.exists():
             return []
 
-        return list(self.build_dir.rglob("*.json"))
+        if files is None:
+            return list(self.build_dir.rglob("*.json"))
+
+        resolved_build = self.build_dir.resolve()
+        result = []
+        for f in files:
+            resolved = f.resolve()
+            if not resolved.exists():
+                print(f"Error: file not found: {f}")
+                sys.exit(1)
+            if not resolved.is_relative_to(resolved_build):
+                print(f"Error: file not under build directory: {f}")
+                sys.exit(1)
+            result.append(resolved)
+        return result
