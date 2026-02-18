@@ -65,13 +65,19 @@ GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver push
 
 This uploads pre-built JSON dashboards from `./dashboards/build/` to Grafana. Requires Grafana credentials. Run `build` first.
 
+To push only specific files (e.g. dashboards that changed in a PR):
+
+```bash
+GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver push --files dashboards/build/dash1.json dashboards/build/dash2.json
+```
+
 ### Upload (Build + Push)
 
 ```bash
 GRAFANA_CONTEXT=myproject-1 DASHBOARD_DIR=./dashboards uvx grafana-weaver upload
 ```
 
-Convenience wrapper that runs `build` then `push` in a single step.
+Convenience wrapper that runs `build` then `push` in a single step. Also supports `--files` to build everything but only push specific dashboards.
 
 ## External Content
 
