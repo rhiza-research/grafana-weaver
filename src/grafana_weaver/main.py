@@ -182,10 +182,11 @@ def build_dashboards(args):
 
     if not json_files:
         print("No dashboards found to build")
-        return
+        return json_files
 
     print(f"\nBuild complete: {len(json_files)} dashboard(s) built")
     print(f"Output directory: {args.dashboard_dir / 'build'}")
+    return json_files
 
 
 # ============================================================================
@@ -284,7 +285,10 @@ def push_dashboards(args):
 
 def upload_dashboards(args):
     """Build and upload dashboards to Grafana."""
-    build_dashboards(args)
+    json_files = build_dashboards(args)
+    if not json_files:
+        # Skip push to avoid uploading stale files from a previous build
+        return
     push_dashboards(args)
 
 
