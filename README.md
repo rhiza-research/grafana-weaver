@@ -481,6 +481,24 @@ uv run ruff check --fix src/ tests/ && uv run ruff format src/ tests/
 
 See `[tool.ruff]` section in `pyproject.toml` for full configuration.
 
+### Local Grafana for Testing
+
+A `docker-compose.yml` is included to run a local Grafana instance for testing uploads, downloads, and the full round-trip workflow without cloud resources:
+
+```bash
+# Start Grafana (ephemeral, no persistent storage)
+docker compose up -d
+
+# Configure a local context
+uv run grafana-weaver config add local --server http://localhost:3000 --user admin --password admin
+
+# Test the workflow
+GRAFANA_CONTEXT=local uv run grafana-weaver upload
+GRAFANA_CONTEXT=local uv run grafana-weaver download
+```
+
+Grafana will be available at http://localhost:3000 with anonymous admin access enabled.
+
 ### Dependencies
 
 The project has minimal dependencies:
