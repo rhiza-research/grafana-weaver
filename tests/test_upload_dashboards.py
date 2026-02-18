@@ -233,10 +233,10 @@ class TestPush:
         mock_client_instance.upload_dashboard.return_value = {"status": "success"}
         mock_client.return_value = mock_client_instance
 
-        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test")
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
         push_dashboards(args)
 
-        mock_builder_instance.get_built_files.assert_called_once()
+        mock_builder_instance.get_built_files.assert_called_once_with(files=None)
         mock_client_instance.upload_dashboard.assert_called_once()
 
         captured = capsys.readouterr()
@@ -247,7 +247,7 @@ class TestPush:
         dashboards_dir = tmp_path / "dashboards"
         dashboards_dir.mkdir()
 
-        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test")
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
 
         with pytest.raises(SystemExit) as exc_info:
             push_dashboards(args)
@@ -263,7 +263,7 @@ class TestPush:
         mock_builder_instance.get_built_files.return_value = []
         mock_builder.return_value = mock_builder_instance
 
-        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test")
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
         push_dashboards(args)
 
         captured = capsys.readouterr()
@@ -299,7 +299,7 @@ class TestPush:
         mock_client_instance.upload_dashboard.return_value = {"status": "success"}
         mock_client.return_value = mock_client_instance
 
-        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test")
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
         push_dashboards(args)
 
         mock_client_instance.get_or_create_folder.assert_called_once_with("My Folder")
@@ -335,7 +335,73 @@ class TestPush:
         mock_client_instance.upload_dashboard.side_effect = Exception("Server error")
         mock_client.return_value = mock_client_instance
 
-        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test")
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=None)
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+    @patch("grafana_weaver.main.GrafanaClient")
+    @patch("grafana_weaver.main.GrafanaConfigManager")
+    def test_push_with_files_filter(self, mock_config_mgr, mock_client, tmp_path, capsys):
+        """Push with --files should only upload specified files."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        # Create two dashboards but only pass one via --files
+        file1 = build_dir / "dash1.json"
+        file2 = build_dir / "dash2.json"
+        file1.write_text('{"uid": "dash1", "title": "Dashboard 1"}')
+        file2.write_text('{"uid": "dash2", "title": "Dashboard 2"}')
+
+        mock_manager = Mock()
+        mock_manager.get_context.return_value = {
+            "server": "https://grafana.example.com",
+            "user": "admin",
+            "password": "secret",
+            "org-id": 1,
+        }
+        mock_config_mgr.return_value = mock_manager
+
+        mock_client_instance = Mock()
+        mock_client_instance.upload_dashboard.return_value = {"status": "success"}
+        mock_client.return_value = mock_client_instance
+
+        # Only push file1
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[file1])
+        push_dashboards(args)
+
+        # Should only upload one dashboard
+        mock_client_instance.upload_dashboard.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Push complete: 1 succeeded, 0 failed" in captured.out
+
+    def test_push_with_files_not_found(self, tmp_path):
+        """Push with --files should exit if a file doesn't exist."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        nonexistent = build_dir / "missing.json"
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[nonexistent])
+
+        with pytest.raises(SystemExit) as exc_info:
+            push_dashboards(args)
+        assert exc_info.value.code == 1
+
+    def test_push_with_files_outside_build_dir(self, tmp_path):
+        """Push with --files should exit if a file is outside build dir."""
+        dashboards_dir = tmp_path / "dashboards"
+        build_dir = dashboards_dir / "build"
+        build_dir.mkdir(parents=True)
+
+        # File exists but is outside build/
+        outside_file = tmp_path / "outside.json"
+        outside_file.write_text('{"uid": "outside"}')
+
+        args = SimpleNamespace(dashboard_dir=dashboards_dir, grafana_context="test", files=[outside_file])
 
         with pytest.raises(SystemExit) as exc_info:
             push_dashboards(args)
@@ -386,6 +452,7 @@ class TestMain:
         args = SimpleNamespace(
             dashboard_dir=dashboards_dir,
             grafana_context="test-context",
+            files=None,
         )
         upload_dashboards(args)
 
@@ -393,7 +460,7 @@ class TestMain:
         mock_config_mgr.assert_called_once_with(context="test-context")
         mock_manager.get_context.assert_called_once_with()
         mock_builder_instance.build_all.assert_called_once()
-        mock_builder_instance.get_built_files.assert_called_once()
+        mock_builder_instance.get_built_files.assert_called_once_with(files=None)
         mock_client_instance.upload_dashboard.assert_called_once()
 
     def test_main_dashboards_dir_not_found(self, tmp_path):
@@ -403,6 +470,7 @@ class TestMain:
         args = SimpleNamespace(
             dashboard_dir=nonexistent_dir,
             grafana_context="test-context",
+            files=None,
         )
 
         with pytest.raises(SystemExit) as exc_info:

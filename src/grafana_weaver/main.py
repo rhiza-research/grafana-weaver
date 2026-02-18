@@ -203,7 +203,7 @@ def push_dashboards(args):
         sys.exit(1)
 
     builder = JsonnetBuilder(args.dashboard_dir)
-    json_files = builder.get_built_files()
+    json_files = builder.get_built_files(files=args.files)
 
     if not json_files:
         print("No built dashboards found to push")
@@ -477,12 +477,24 @@ def main():
     push_parser = subparsers.add_parser("push", help="Push pre-built dashboards to Grafana")
     add_dashboard_dir_arg(push_parser)
     add_grafana_context_arg(push_parser)
+    push_parser.add_argument(
+        "--files",
+        nargs="+",
+        type=Path,
+        help="Specific built JSON files to push (default: all files in build/)",
+    )
     push_parser.set_defaults(func=push_dashboards)
 
     # Upload subcommand
     upload_parser = subparsers.add_parser("upload", help="Build and upload dashboards to Grafana")
     add_dashboard_dir_arg(upload_parser)
     add_grafana_context_arg(upload_parser)
+    upload_parser.add_argument(
+        "--files",
+        nargs="+",
+        type=Path,
+        help="Specific built JSON files to push (default: all files in build/)",
+    )
     upload_parser.set_defaults(func=upload_dashboards)
 
     # Download subcommand
